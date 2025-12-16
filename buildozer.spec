@@ -60,8 +60,17 @@ android.build_tools = 31.0.0
 # (str) Android NDK版本
 android.ndk = 25.1.8937393
 
-# (list) Android架构
-android.arch = armeabi-v7a
+# (list) Android架构 (已更新为复数形式)
+android.archs = armeabi-v7a
+
+# (int) 下载超时时间（秒）
+android.download_timeout = 300
+
+# (bool) 允许下载重试
+android.download_retry = True
+
+# (int) 最大重试次数
+android.download_max_retries = 3
 
 # (str) 自定义AndroidManifest.xml模板
 android.manifest.intent_filters = []
@@ -96,3 +105,12 @@ output_dir = bin
 
 # (str) 构建日志文件
 log_file = buildozer.log
+
+# (int) 全局超时时间（秒）
+timeout = 300
+
+# (bool) 允许重试
+retry = True
+
+# (int) 最大重试次数
+max_retries = 3
