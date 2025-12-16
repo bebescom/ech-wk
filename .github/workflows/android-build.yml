@@ -1,4 +1,4 @@
-name: Build Android APK (Force NDK Path)
+name: Build Android APK (Debug NDK Installation)
 
 on:
   push:
@@ -10,7 +10,7 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
-    timeout-minutes: 90
+    timeout-minutes: 120
     
     steps:
     - name: Checkout code
@@ -60,93 +60,169 @@ jobs:
         restore-keys: |
           ${{ runner.os }}-go-
           
-    - name: Manually download and install Android components
+    - name: Debug information
       run: |
+        echo "=== 系统信息 ==="
+        uname -a
+        echo "=== 磁盘空间 ==="
+        df -h
+        echo "=== 内存信息 ==="
+        free -h
+        echo "=== 当前目录 ==="
+        pwd
+        ls -la
+        echo "=== 环境变量 ==="
+        env | sort
+        
+    - name: Manually download and install Android components with debug
+      run: |
+        set -x  # 启用调试输出
+        
         # 创建必要的目录
+        echo "=== 创建目录结构 ==="
         mkdir -p ~/.buildozer/android/platform
         mkdir -p ~/.buildozer/cache
+        mkdir -p ~/.buildozer/logs
+        
+        # 显示目录权限
+        echo "=== 目录权限 ==="
+        ls -la ~/.buildozer/
+        ls -la ~/.buildozer/android/
         
         # 1. 下载并安装Android NDK r25b
         echo "=== 手动下载Android NDK r25b ==="
-        if [ ! -d "~/.buildozer/android/platform/android-ndk-r25b" ]; then
-            echo "正在下载Android NDK..."
-            curl -L --retry 15 --retry-delay 20 --max-time 900 \
-              https://dl.google.com/android/repository/android-ndk-r25b-linux.zip \
-              -o ndk.zip
+        ndk_zip="android-ndk-r25b-linux.zip"
+        ndk_url="https://dl.google.com/android/repository/android-ndk-r25b-linux.zip"
+        
+        # 检查是否已下载
+        if [ -f "$ndk_zip" ]; then
+            echo "✅ NDK压缩包已存在"
+            ls -la "$ndk_zip"
+        else
+            echo "正在下载NDK: $ndk_url"
+            # 使用详细模式下载，显示进度和错误
+            curl -L --verbose --retry 20 --retry-delay 30 --max-time 1200 \
+              --progress-bar --show-error \
+              "$ndk_url" -o "$ndk_zip"
             
-            echo "正在解压NDK..."
-            unzip -q ndk.zip -d ~/.buildozer/android/platform/
-            rm -f ndk.zip
-            
-            # 验证安装
-            if [ -d "~/.buildozer/android/platform/android-ndk-r25b" ]; then
-                echo "✅ NDK安装成功"
-            else
-                echo "❌ NDK安装失败"
+            # 验证下载结果
+            if [ $? -ne 0 ]; then
+                echo "❌ NDK下载失败"
                 exit 1
             fi
+            
+            # 验证文件大小
+            file_size=$(stat -c%s "$ndk_zip")
+            echo "下载的文件大小: $file_size 字节"
+            
+            # 最小预期大小：约600MB (629145600字节)
+            if [ $file_size -lt 600000000 ]; then
+                echo "❌ NDK文件太小，可能下载不完整"
+                ls -la "$ndk_zip"
+                exit 1
+            fi
+        fi
+        
+        # 解压NDK
+        echo "=== 解压NDK ==="
+        target_dir=~/.buildozer/android/platform/
+        
+        # 先清理可能存在的旧文件
+        if [ -d "$target_dir/android-ndk-r25b" ]; then
+            echo "清理旧的NDK目录..."
+            rm -rf "$target_dir/android-ndk-r25b"
+        fi
+        
+        # 使用详细模式解压
+        echo "正在解压到: $target_dir"
+        unzip -o -v "$ndk_zip" -d "$target_dir"
+        
+        # 验证解压结果
+        if [ $? -ne 0 ]; then
+            echo "❌ NDK解压失败"
+            exit 1
+        fi
+        
+        # 验证解压后的目录
+        if [ -d "$target_dir/android-ndk-r25b" ]; then
+            echo "✅ NDK解压成功"
+            ls -la "$target_dir/android-ndk-r25b/"
+            echo "NDK版本信息:"
+            cat "$target_dir/android-ndk-r25b/source.properties" 2>/dev/null || echo "无法读取版本信息"
         else
-            echo "✅ NDK已存在，跳过下载"
+            echo "❌ NDK解压目录不存在"
+            ls -la "$target_dir"
+            exit 1
         fi
         
         # 2. 下载并安装Android SDK
         echo "=== 手动下载Android SDK ==="
-        if [ ! -d "~/.buildozer/android/platform/android-sdk" ]; then
-            echo "正在下载Android SDK..."
-            curl -L --retry 10 --retry-delay 15 --max-time 600 \
-              https://dl.google.com/android/repository/commandlinetools-linux-6514223_latest.zip \
-              -o sdk.zip
+        sdk_zip="commandlinetools-linux-6514223_latest.zip"
+        sdk_url="https://dl.google.com/android/repository/$sdk_zip"
+        
+        if [ ! -f "$sdk_zip" ]; then
+            echo "正在下载SDK: $sdk_url"
+            curl -L --verbose --retry 15 --retry-delay 20 --max-time 900 \
+              --progress-bar --show-error \
+              "$sdk_url" -o "$sdk_zip"
             
-            echo "正在解压SDK..."
-            mkdir -p ~/.buildozer/android/platform/android-sdk
-            unzip -q sdk.zip -d ~/.buildozer/android/platform/android-sdk/
-            rm -f sdk.zip
-            
-            # 验证安装
-            if [ -d "~/.buildozer/android/platform/android-sdk/cmdline-tools" ]; then
-                echo "✅ SDK安装成功"
-            else
-                echo "❌ SDK安装失败"
+            if [ $? -ne 0 ]; then
+                echo "❌ SDK下载失败"
                 exit 1
             fi
-        else
-            echo "✅ SDK已存在，跳过下载"
+        fi
+        
+        # 解压SDK
+        sdk_dir="$target_dir/android-sdk"
+        if [ ! -d "$sdk_dir" ]; then
+            mkdir -p "$sdk_dir"
+            unzip -o -v "$sdk_zip" -d "$sdk_dir"
+            
+            if [ $? -ne 0 ]; then
+                echo "❌ SDK解压失败"
+                exit 1
+            fi
         fi
         
         # 3. 下载并安装Apache ANT
         echo "=== 手动下载Apache ANT ==="
-        if [ ! -d "~/.buildozer/android/platform/apache-ant-1.9.4" ]; then
-            echo "正在下载Apache ANT..."
-            curl -L --retry 10 --retry-delay 10 --max-time 300 \
-              https://archive.apache.org/dist/ant/binaries/apache-ant-1.9.4-bin.tar.gz \
-              -o ant.tar.gz
+        ant_tar="apache-ant-1.9.4-bin.tar.gz"
+        ant_url="https://archive.apache.org/dist/ant/binaries/$ant_tar"
+        
+        if [ ! -f "$ant_tar" ]; then
+            echo "正在下载ANT: $ant_url"
+            curl -L --verbose --retry 10 --retry-delay 15 --max-time 600 \
+              --progress-bar --show-error \
+              "$ant_url" -o "$ant_tar"
             
-            echo "正在解压ANT..."
-            mkdir -p ~/.buildozer/android/platform/apache-ant-1.9.4
-            tar xzf ant.tar.gz -C ~/.buildozer/android/platform/
-            rm -f ant.tar.gz
-            
-            # 验证安装
-            if [ -d "~/.buildozer/android/platform/apache-ant-1.9.4" ]; then
-                echo "✅ ANT安装成功"
-            else
-                echo "❌ ANT安装失败"
+            if [ $? -ne 0 ]; then
+                echo "❌ ANT下载失败"
                 exit 1
             fi
-        else
-            echo "✅ ANT已存在，跳过下载"
+        fi
+        
+        # 解压ANT
+        ant_dir="$target_dir/apache-ant-1.9.4"
+        if [ ! -d "$ant_dir" ]; then
+            tar xzf -v "$ant_tar" -C "$target_dir"
+            
+            if [ $? -ne 0 ]; then
+                echo "❌ ANT解压失败"
+                exit 1
+            fi
         fi
         
         # 设置环境变量
-        export ANDROID_NDK_HOME=~/.buildozer/android/platform/android-ndk-r25b
-        export ANDROID_SDK_ROOT=~/.buildozer/android/platform/android-sdk
-        export ANT_HOME=~/.buildozer/android/platform/apache-ant-1.9.4
+        export ANDROID_NDK_HOME="$target_dir/android-ndk-r25b"
+        export ANDROID_SDK_ROOT="$sdk_dir"
+        export ANT_HOME="$ant_dir"
+        export PATH="$PATH:$ANT_HOME/bin"
         
         # 将环境变量写入文件，供后续步骤使用
         echo "ANDROID_NDK_HOME=$ANDROID_NDK_HOME" >> $GITHUB_ENV
         echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT" >> $GITHUB_ENV
         echo "ANT_HOME=$ANT_HOME" >> $GITHUB_ENV
-        echo "PATH=$PATH:$ANT_HOME/bin" >> $GITHUB_ENV
+        echo "PATH=$PATH" >> $GITHUB_ENV
         
         # 显示安装摘要
         echo "=== 安装摘要 ==="
@@ -178,9 +254,9 @@ jobs:
         path: |
           ~/.buildozer
           .buildozer
-        key: ${{ runner.os }}-buildozer-full-${{ hashFiles('buildozer.spec') }}
+        key: ${{ runner.os }}-buildozer-debug-${{ hashFiles('buildozer.spec') }}
         restore-keys: |
-          ${{ runner.os }}-buildozer-full-
+          ${{ runner.os }}-buildozer-debug-
           
     - name: Patch Buildozer to skip NDK download
       run: |
@@ -223,7 +299,7 @@ jobs:
         # 运行补丁
         python patch_buildozer.py
         
-    - name: Build Android APK with pre-installed components
+    - name: Build Android APK with debug logs
       run: |
         echo "=== 开始构建Android APK ==="
         
@@ -235,6 +311,7 @@ jobs:
         # 验证所有组件都已安装
         if [ ! -d "$ANDROID_NDK_HOME" ]; then
             echo "❌ NDK目录不存在: $ANDROID_NDK_HOME"
+            ls -la ~/.buildozer/android/platform/
             exit 1
         fi
         
@@ -248,11 +325,39 @@ jobs:
             exit 1
         fi
         
-        # 运行Buildozer
-        echo "✅ 所有组件验证成功，开始构建..."
-        buildozer -v android debug
+        # 显示更多调试信息
+        echo "=== 详细调试信息 ==="
+        echo "Buildozer版本:"
+        buildozer --version
+        
+        echo "=== 运行Buildozer ==="
+        # 使用详细日志级别运行Buildozer
+        buildozer -v android debug 2>&1 | tee buildozer.log
+        
+        # 检查是否生成了APK
+        if [ -f "bin/*.apk" ]; then
+            echo "✅ APK构建成功"
+            ls -la bin/
+        else
+            echo "❌ APK构建失败"
+            # 显示最后100行日志
+            echo "=== 最后100行构建日志 ==="
+            tail -n 100 buildozer.log
+            exit 1
+        fi
       
+    - name: Upload debug logs
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: build-debug-logs
+        path: |
+          buildozer.log
+          ~/.buildozer/logs/*
+        retention-days: 7
+        
     - name: Upload APK artifact
+      if: success()
       uses: actions/upload-artifact@v4
       with:
         name: android-armv7a-apk
