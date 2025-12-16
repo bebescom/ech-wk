@@ -36,6 +36,9 @@ android.ndk_path = /home/runner/.buildozer/android/platform/android-ndk-r25c
 # 自动接受 license（保险）
 android.accept_sdk_license = True
 
+# 跳过系统 libffi 检查，使用 p4a 内置版本（解决 libffi autoreconf 错误）
+p4a.libffi_no_system = True
+
 # (str) 应用URL
 url = https://github.com/byJoey/ech-wk
 
@@ -60,7 +63,7 @@ source.exclude_exts = spec,pyc,pyo
 # (list) 包含的目录
 source.include_dirs = .
 
-# (list) Python依赖（关键修改：用 kivy 作为 GUI 框架，支持 Android）
+# (list) Python依赖（必须使用 kivy 作为 GUI 框架）
 requirements = python3,kivy,pillow,requests
 
 # (str) Python版本
