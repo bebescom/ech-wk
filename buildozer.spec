@@ -58,8 +58,7 @@ android.api = 31
 android.build_tools = 31.0.0
 
 # (str) Android NDK版本
-android.ndk = 25.1.8937393
-
+android.ndk = r25c
 # (list) Android架构 (已更新为复数形式)
 android.archs = armeabi-v7a
 
