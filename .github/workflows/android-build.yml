@@ -1,4 +1,4 @@
-name: Build Android APK (Fix ANT Extraction)
+name: Build Android APK (Fix Buildozer Patch)
 
 on:
   push:
@@ -69,7 +69,7 @@ jobs:
         echo "=== 内存信息 ==="
         free -h
         
-    - name: Manually download and install Android components with ANT fix
+    - name: Manually download and install Android components
       run: |
         set -x  # 启用调试输出
         
@@ -232,7 +232,7 @@ jobs:
             fi
         fi
         
-        # 3. 下载并安装Apache ANT - 修复语法错误
+        # 3. 下载并安装Apache ANT
         echo "=== 手动下载Apache ANT ==="
         ant_tar="apache-ant-1.9.4-bin.tar.gz"
         ant_url="https://archive.apache.org/dist/ant/binaries/$ant_tar"
@@ -256,11 +256,10 @@ jobs:
         ls -la "$ant_tar"
         file "$ant_tar"
         
-        # 解压ANT - 修复语法错误：将"xzf -v"改为"xzvf"
+        # 解压ANT
         ant_dir="$target_dir/apache-ant-1.9.4"
         if [ ! -d "$ant_dir" ]; then
             echo "正在解压ANT..."
-            # 修复：使用正确的tar语法
             tar xzvf "$ant_tar" -C "$target_dir"
             
             # 检查解压结果
@@ -326,11 +325,11 @@ jobs:
         path: |
           ~/.buildozer
           .buildozer
-        key: ${{ runner.os }}-buildozer-fix-ant-${{ hashFiles('buildozer.spec') }}
+        key: ${{ runner.os }}-buildozer-fix-patch-${{ hashFiles('buildozer.spec') }}
         restore-keys: |
-          ${{ runner.os }}-buildozer-fix-ant-
+          ${{ runner.os }}-buildozer-fix-patch-
           
-    - name: Patch Buildozer to skip NDK download
+    - name: Patch Buildozer with flexible method (Fix AttributeError)
       run: |
         echo "=== 修补Buildozer以跳过NDK下载 ==="
         
@@ -340,35 +339,102 @@ jobs:
         
         echo "Buildozer目标文件目录: $buildozer_targets_dir"
         
-        # 创建一个补丁来跳过NDK下载
+        # 创建一个更灵活的补丁，处理不同的Buildozer版本
         cat > patch_buildozer.py << 'EOF'
         import buildozer.targets.android
         import os
+        import inspect
         
-        # 保存原始的_install_android_ndk方法
-        original_install_android_ndk = buildozer.targets.android.AndroidTarget._install_android_ndk
+        # 调试：打印模块内容，帮助理解结构
+        print("=== Buildozer Android模块内容 ===")
+        for item in dir(buildozer.targets.android):
+            if not item.startswith('_'):
+                print(f"  {item}")
         
-        def patched_install_android_ndk(self):
-            """
-            修补后的_install_android_ndk方法，跳过下载
-            """
-            # 智能检测NDK目录
-            target_dir = os.path.expanduser("~/.buildozer/android/platform/")
-            ndk_dirs = [d for d in os.listdir(target_dir) if d.startswith('android-ndk-') and os.path.isdir(os.path.join(target_dir, d))]
+        # 查找Android目标类 - 处理不同的Buildozer版本
+        android_target_class = None
+        
+        # 尝试常见的类名
+        for class_name in ['AndroidTarget', 'TargetAndroid', 'Android']:
+            if hasattr(buildozer.targets.android, class_name):
+                android_target_class = getattr(buildozer.targets.android, class_name)
+                print(f"✅ 找到Android目标类: {class_name}")
+                break
+        
+        if not android_target_class:
+            # 如果找不到已知的类名，尝试查找所有类
+            print("⚠️ 找不到已知的Android目标类，尝试自动检测...")
+            for name, obj in inspect.getmembers(buildozer.targets.android):
+                if inspect.isclass(obj) and 'android' in name.lower():
+                    android_target_class = obj
+                    print(f"✅ 自动检测到Android目标类: {name}")
+                    break
+        
+        if not android_target_class:
+            print("❌ 无法找到Android目标类")
+            # 作为最后的手段，直接修改模块级别的_install_android_ndk函数
+            if hasattr(buildozer.targets.android, '_install_android_ndk'):
+                print("⚠️ 尝试直接修补模块级别的函数")
+                
+                original_install_android_ndk = buildozer.targets.android._install_android_ndk
+                
+                def patched_install_android_ndk(self):
+                    """
+                    修补后的_install_android_ndk函数，跳过下载
+                    """
+                    target_dir = os.path.expanduser("~/.buildozer/android/platform/")
+                    ndk_dirs = [d for d in os.listdir(target_dir) if d.startswith('android-ndk-') and os.path.isdir(os.path.join(target_dir, d))]
+                    
+                    if ndk_dirs:
+                        ndk_path = os.path.join(target_dir, ndk_dirs[0])
+                        self.buildozer.info(f"✅ NDK已手动安装在: {ndk_path}")
+                        self.buildozer.global_platform_dir = target_dir
+                        return
+                    
+                    # 如果NDK不存在，调用原始方法
+                    self.buildozer.warning("⚠️ NDK未找到，使用原始下载方法")
+                    original_install_android_ndk(self)
+                
+                # 替换模块级别的函数
+                buildozer.targets.android._install_android_ndk = patched_install_android_ndk
+                print("✅ Buildozer已成功修补（模块级别）")
+            else:
+                print("❌ 无法找到_install_android_ndk方法")
+        else:
+            # 找到类后，修补其方法
+            print(f"=== 检查 {android_target_class.__name__} 类的方法 ===")
+            for method in dir(android_target_class):
+                if 'install' in method.lower() and 'ndk' in method.lower():
+                    print(f"  找到可能的方法: {method}")
             
-            if ndk_dirs:
-                ndk_path = os.path.join(target_dir, ndk_dirs[0])
-                self.buildozer.info(f"✅ NDK已手动安装在: {ndk_path}")
-                self.buildozer.global_platform_dir = target_dir
-                return
-            
-            # 如果NDK不存在，调用原始方法
-            self.buildozer.warning("⚠️ NDK未找到，使用原始下载方法")
-            original_install_android_ndk(self)
+            # 查找_install_android_ndk方法
+            if hasattr(android_target_class, '_install_android_ndk'):
+                original_method = android_target_class._install_android_ndk
+                
+                def patched_install_android_ndk(self):
+                    """
+                    修补后的_install_android_ndk方法，跳过下载
+                    """
+                    target_dir = os.path.expanduser("~/.buildozer/android/platform/")
+                    ndk_dirs = [d for d in os.listdir(target_dir) if d.startswith('android-ndk-') and os.path.isdir(os.path.join(target_dir, d))]
+                    
+                    if ndk_dirs:
+                        ndk_path = os.path.join(target_dir, ndk_dirs[0])
+                        self.buildozer.info(f"✅ NDK已手动安装在: {ndk_path}")
+                        self.buildozer.global_platform_dir = target_dir
+                        return
+                    
+                    # 如果NDK不存在，调用原始方法
+                    self.buildozer.warning("⚠️ NDK未找到，使用原始下载方法")
+                    original_method(self)
+                
+                # 替换类方法
+                setattr(android_target_class, '_install_android_ndk', patched_install_android_ndk)
+                print("✅ Buildozer已成功修补（类方法级别）")
+            else:
+                print("❌ 无法找到_install_android_ndk方法")
         
-        # 替换原始方法
-        buildozer.targets.android.AndroidTarget._install_android_ndk = patched_install_android_ndk
-        print("✅ Buildozer已成功修补，将跳过NDK下载")
+        print("=== 修补完成 ===")
         EOF
         
         # 运行补丁
@@ -425,7 +491,7 @@ jobs:
       if: always()
       uses: actions/upload-artifact@v4
       with:
-        name: build-fix-ant-logs
+        name: build-fix-buildozer-patch-logs
         path: |
           buildozer.log
           ~/.buildozer/logs/*
