@@ -1,4 +1,4 @@
-name: Build Android APK (Fixed Size Check)
+name: Build Android APK (Fix Directory Check)
 
 on:
   push:
@@ -10,7 +10,7 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
-    timeout-minutes: 120
+    timeout-minutes: 180
     
     steps:
     - name: Checkout code
@@ -31,7 +31,7 @@ jobs:
         sudo apt update
         sudo apt install -y build-essential ccache git libncurses5-dev libssl-dev libffi-dev python3-dev python3-pip \
                           libsdl2-dev libsdl2-image-dev libsdl2-ttf-dev libsdl2-mixer-dev libjpeg-dev zlib1g-dev \
-                          openjdk-17-jdk unzip wget curl
+                          openjdk-17-jdk unzip wget curl p7zip-full
         
     - name: Install Python dependencies
       run: |
@@ -60,7 +60,7 @@ jobs:
         restore-keys: |
           ${{ runner.os }}-go-
           
-    - name: Debug information
+    - name: System diagnostic information
       run: |
         echo "=== 系统信息 ==="
         uname -a
@@ -68,11 +68,8 @@ jobs:
         df -h
         echo "=== 内存信息 ==="
         free -h
-        echo "=== 当前目录 ==="
-        pwd
-        ls -la
         
-    - name: Manually download and install Android components
+    - name: Manually download and install Android components with fixed directory check
       run: |
         set -x  # 启用调试输出
         
@@ -86,6 +83,7 @@ jobs:
         echo "=== 手动下载Android NDK r25b ==="
         ndk_zip="android-ndk-r25b-linux.zip"
         ndk_url="https://dl.google.com/android/repository/android-ndk-r25b-linux.zip"
+        target_dir=~/.buildozer/android/platform/
         
         # 检查是否已下载
         if [ -f "$ndk_zip" ]; then
@@ -105,12 +103,11 @@ jobs:
             fi
         fi
         
-        # 验证文件大小（调整为正确的大小检查）
+        # 验证文件大小
         file_size=$(stat -c%s "$ndk_zip")
         echo "下载的文件大小: $file_size 字节"
         
         # 正确的最小预期大小：约500MB (524288000字节)
-        # 根据服务器返回的content-length: 530975885
         min_expected_size=500000000
         
         if [ $file_size -lt $min_expected_size ]; then
@@ -123,35 +120,62 @@ jobs:
             echo "✅ NDK文件大小验证通过"
         fi
         
-        # 解压NDK
+        # 解压NDK - 修复的核心部分
         echo "=== 解压NDK ==="
-        target_dir=~/.buildozer/android/platform/
         
         # 先清理可能存在的旧文件
-        if [ -d "$target_dir/android-ndk-r25b" ]; then
-            echo "清理旧的NDK目录..."
-            rm -rf "$target_dir/android-ndk-r25b"
-        fi
+        echo "清理目标目录: $target_dir"
+        rm -rf "$target_dir"*
         
-        # 使用详细模式解压
-        echo "正在解压到: $target_dir"
-        unzip -o -v "$ndk_zip" -d "$target_dir"
+        # 创建干净的目标目录
+        mkdir -p "$target_dir"
+        
+        # 使用7z解压并显示详细信息
+        echo "正在使用7z解压NDK到: $target_dir"
+        7z x -y "$ndk_zip" -o"$target_dir"
         
         # 验证解压结果
         if [ $? -ne 0 ]; then
-            echo "❌ NDK解压失败"
+            echo "❌ 7z解压NDK失败，尝试使用unzip..."
+            unzip -o -v "$ndk_zip" -d "$target_dir"
+            
+            if [ $? -ne 0 ]; then
+                echo "❌ NDK解压失败"
+                exit 1
+            fi
+        fi
+        
+        # 列出解压后的所有内容（关键调试信息）
+        echo "=== 解压后的目录内容 ==="
+        ls -la "$target_dir"
+        echo "=== 子目录列表 ==="
+        find "$target_dir" -type d | head -20
+        
+        # 智能检测NDK目录 - 修复的核心逻辑
+        echo "=== 智能检测NDK目录 ==="
+        
+        # 查找所有可能的NDK目录
+        ndk_dirs=$(find "$target_dir" -maxdepth 1 -type d -name "android-ndk-*" | sort)
+        
+        if [ -z "$ndk_dirs" ]; then
+            echo "❌ 未找到NDK目录"
+            echo "目标目录内容:"
+            ls -la "$target_dir"
             exit 1
         fi
         
-        # 验证解压后的目录
-        if [ -d "$target_dir/android-ndk-r25b" ]; then
-            echo "✅ NDK解压成功"
-            ls -la "$target_dir/android-ndk-r25b/" | head -20
+        # 选择第一个NDK目录
+        selected_ndk_dir=$(echo "$ndk_dirs" | head -n 1)
+        echo "找到NDK目录: $selected_ndk_dir"
+        
+        # 验证目录内容
+        if [ -f "$selected_ndk_dir/source.properties" ]; then
+            echo "✅ NDK目录验证通过"
             echo "NDK版本信息:"
-            cat "$target_dir/android-ndk-r25b/source.properties" 2>/dev/null || echo "无法读取版本信息"
+            cat "$selected_ndk_dir/source.properties" 2>/dev/null
         else
-            echo "❌ NDK解压目录不存在"
-            ls -la "$target_dir"
+            echo "❌ NDK目录不完整"
+            ls -la "$selected_ndk_dir"
             exit 1
         fi
         
@@ -176,11 +200,15 @@ jobs:
         sdk_dir="$target_dir/android-sdk"
         if [ ! -d "$sdk_dir" ]; then
             mkdir -p "$sdk_dir"
-            unzip -o -v "$sdk_zip" -d "$sdk_dir"
+            7z x -y "$sdk_zip" -o"$sdk_dir"
             
             if [ $? -ne 0 ]; then
-                echo "❌ SDK解压失败"
-                exit 1
+                unzip -o -v "$sdk_zip" -d "$sdk_dir"
+                
+                if [ $? -ne 0 ]; then
+                    echo "❌ SDK解压失败"
+                    exit 1
+                fi
             fi
         fi
         
@@ -212,8 +240,8 @@ jobs:
             fi
         fi
         
-        # 设置环境变量
-        export ANDROID_NDK_HOME="$target_dir/android-ndk-r25b"
+        # 设置环境变量 - 使用智能检测到的NDK目录
+        export ANDROID_NDK_HOME="$selected_ndk_dir"
         export ANDROID_SDK_ROOT="$sdk_dir"
         export ANT_HOME="$ant_dir"
         export PATH="$PATH:$ANT_HOME/bin"
@@ -254,9 +282,9 @@ jobs:
         path: |
           ~/.buildozer
           .buildozer
-        key: ${{ runner.os }}-buildozer-fixed-${{ hashFiles('buildozer.spec') }}
+        key: ${{ runner.os }}-buildozer-fix-dir-${{ hashFiles('buildozer.spec') }}
         restore-keys: |
-          ${{ runner.os }}-buildozer-fixed-
+          ${{ runner.os }}-buildozer-fix-dir-
           
     - name: Patch Buildozer to skip NDK download
       run: |
@@ -280,11 +308,14 @@ jobs:
             """
             修补后的_install_android_ndk方法，跳过下载
             """
-            ndk_path = os.path.expanduser("~/.buildozer/android/platform/android-ndk-r25b")
+            # 智能检测NDK目录
+            target_dir = os.path.expanduser("~/.buildozer/android/platform/")
+            ndk_dirs = [d for d in os.listdir(target_dir) if d.startswith('android-ndk-') and os.path.isdir(os.path.join(target_dir, d))]
             
-            if os.path.exists(ndk_path):
-                self.buildozer.info("✅ NDK已手动安装，跳过下载")
-                self.buildozer.global_platform_dir = os.path.expanduser("~/.buildozer/android/platform")
+            if ndk_dirs:
+                ndk_path = os.path.join(target_dir, ndk_dirs[0])
+                self.buildozer.info(f"✅ NDK已手动安装在: {ndk_path}")
+                self.buildozer.global_platform_dir = target_dir
                 return
             
             # 如果NDK不存在，调用原始方法
@@ -340,9 +371,9 @@ jobs:
             ls -la bin/
         else
             echo "❌ APK构建失败"
-            # 显示最后100行日志
-            echo "=== 最后100行构建日志 ==="
-            tail -n 100 buildozer.log
+            # 显示最后200行日志
+            echo "=== 最后200行构建日志 ==="
+            tail -n 200 buildozer.log
             exit 1
         fi
       
@@ -350,11 +381,11 @@ jobs:
       if: always()
       uses: actions/upload-artifact@v4
       with:
-        name: build-debug-logs
+        name: build-directory-fix-logs
         path: |
           buildozer.log
           ~/.buildozer/logs/*
-        retention-days: 7
+        retention-days: 14
         
     - name: Upload APK artifact
       if: success()
@@ -362,14 +393,4 @@ jobs:
       with:
         name: android-armv7a-apk
         path: bin/*.apk
-        retention-days: 7
-        
-    - name: Create GitHub Release
-      if: github.event_name == 'push' && github.ref == 'refs/heads/main' && success()
-      uses: softprops/action-gh-release@v1
-      with:
-        files: bin/*.apk
-        name: Android Release ${{ github.sha }}
-        tag_name: android-${{ github.sha }}
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        retention-days: 30
