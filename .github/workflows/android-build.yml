@@ -45,18 +45,20 @@ jobs:
             rm ndk.zip
             echo "NDK r25c installed"
           else
-            echo "NDK r25c already cached"
+            echo "NDK already cached"
           fi
 
       - name: Build Go binary for Android
         run: |
           chmod +x build_go_android.sh
-          # 自动处理 Go 模块和依赖
           go mod init ech-wk || true
           go get github.com/gorilla/websocket@v1.5.3
           go mod tidy
-          # 执行交叉编译脚本
           ./build_go_android.sh
+
+      - name: Accept Android SDK licenses
+        run: |
+          yes | ~/.buildozer/android/platform/android-sdk/tools/bin/sdkmanager --licenses || true
 
       - name: Build APK with Buildozer
         run: |
