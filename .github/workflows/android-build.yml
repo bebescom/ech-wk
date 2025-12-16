@@ -1,4 +1,4 @@
-name: Build Android APK (Fixed)
+name: Build Android APK
 
 on:
   push:
@@ -83,12 +83,6 @@ jobs:
         file ech-workers
         ls -la ech-workers
         
-    - name: Configure Buildozer mirrors
-      run: |
-        mkdir -p ~/.buildozer
-        echo "sdk.url = https://mirrors.tuna.tsinghua.edu.cn/android/repository/" > ~/.buildozer/config
-        echo "ndk.url = https://mirrors.tuna.tsinghua.edu.cn/android/repository/" >> ~/.buildozer/config
-        
     - name: Cache Buildozer dependencies
       uses: actions/cache@v3
       with:
@@ -101,10 +95,6 @@ jobs:
           
     - name: Build Android APK
       run: |
-        # 使用国内镜像加速
-        export SDK_URL="https://mirrors.tuna.tsinghua.edu.cn/android/repository/"
-        export NDK_URL="https://mirrors.tuna.tsinghua.edu.cn/android/repository/"
-        
         # 运行Buildozer
         buildozer -v android debug
       
