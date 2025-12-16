@@ -17,7 +17,8 @@ description = ECH Workers 代理客户端，支持 ECH 加密和智能分流
 # (str) 应用作者
 author = byJoey
 author.email = your.email@example.com
-# Target Android API (推荐 31 或 33，避免 34+ 的兼容坑)
+
+# Target Android API (稳定版，避免 34+ 兼容坑)
 android.api = 33
 
 # Minimum API
@@ -29,11 +30,12 @@ android.sdk = 33
 # Build-Tools 版本（稳定版，避免最新 36+）
 android.build_tools = 33.0.2
 
-# NDK 路径（保持你之前的）
+# NDK 路径（强制使用缓存的 r25c，避免下载失败）
 android.ndk_path = /home/runner/.buildozer/android/platform/android-ndk-r25c
 
 # 自动接受 license（保险）
 android.accept_sdk_license = True
+
 # (str) 应用URL
 url = https://github.com/byJoey/ech-wk
 
@@ -58,8 +60,8 @@ source.exclude_exts = spec,pyc,pyo
 # (list) 包含的目录
 source.include_dirs = .
 
-# (list) Python依赖
-requirements = python3,pyqt5,pyside2,pystray,pillow,requests
+# (list) Python依赖（关键修改：用 kivy 作为 GUI 框架，支持 Android）
+requirements = python3,kivy,pillow,requests
 
 # (str) Python版本
 python.version = 3.9
@@ -67,12 +69,7 @@ python.version = 3.9
 # (list) Android权限
 android.permissions = INTERNET,ACCESS_NETWORK_STATE,WRITE_EXTERNAL_STORAGE,READ_EXTERNAL_STORAGE,ACCESS_WIFI_STATE,CHANGE_WIFI_STATE
 
-
-
-
-
-
-# (list) Android架构 (已更新为复数形式)
+# (list) Android架构
 android.archs = armeabi-v7a
 
 # (int) 下载超时时间（秒）
