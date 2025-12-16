@@ -17,8 +17,17 @@ description = ECH Workers 代理客户端，支持 ECH 加密和智能分流
 # (str) 应用作者
 author = byJoey
 author.email = your.email@example.com
-#添加的
+# 强制使用稳定且 license 已默认接受的 Build-Tools 30.0.3（强烈推荐，很多项目都在用）
+android.build_tools = 30.0.3
+
+# 同时指定一个稳定的 API 级别（避免拉最新）
+android.api = 33
+
+# 如果你之前加了 ndk_path，这行保持不变
 android.ndk_path = /home/runner/.buildozer/android/platform/android-ndk-r25c
+
+# 可选：最小 API（根据你的项目需求）
+android.minapi = 21
 # (str) 应用URL
 url = https://github.com/byJoey/ech-wk
 
@@ -52,11 +61,9 @@ python.version = 3.9
 # (list) Android权限
 android.permissions = INTERNET,ACCESS_NETWORK_STATE,WRITE_EXTERNAL_STORAGE,READ_EXTERNAL_STORAGE,ACCESS_WIFI_STATE,CHANGE_WIFI_STATE
 
-# (int) Android API级别
-android.api = 31
 
-# (int) Android构建工具版本
-android.build_tools = 31.0.0
+
+
 
 
 # (list) Android架构 (已更新为复数形式)
