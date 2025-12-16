@@ -17,7 +17,8 @@ description = ECH Workers 代理客户端，支持 ECH 加密和智能分流
 # (str) 应用作者
 author = byJoey
 author.email = your.email@example.com
-
+#添加的
+android.ndk_path = /home/runner/.buildozer/android/platform/android-ndk-r25c
 # (str) 应用URL
 url = https://github.com/byJoey/ech-wk
 
@@ -57,8 +58,7 @@ android.api = 31
 # (int) Android构建工具版本
 android.build_tools = 31.0.0
 
-# (str) Android NDK版本
-android.ndk = r25c
+
 # (list) Android架构 (已更新为复数形式)
 android.archs = armeabi-v7a
 
