@@ -30,6 +30,9 @@ presplash.filename = %(source.dir)s/app_icon.png
 # (str) 应用方向 (portrait/landscape)
 orientation = portrait
 
+# (str) 源代码目录（必需配置）
+source.dir = .
+
 # (list) 包含的文件扩展名
 source.include_exts = py,png,jpg,kv,atlas,js,sh,go,exe
 
@@ -59,12 +62,6 @@ android.ndk = 25.1.8937393
 
 # (list) Android架构
 android.arch = armeabi-v7a
-
-# (str) Android SDK下载URL (使用国内镜像加速)
-android.sdk_download_url = https://mirrors.tuna.tsinghua.edu.cn/android/repository/
-
-# (str) Android NDK下载URL (使用国内镜像加速)
-android.ndk_download_url = https://mirrors.tuna.tsinghua.edu.cn/android/repository/
 
 # (str) 自定义AndroidManifest.xml模板
 android.manifest.intent_filters = []
