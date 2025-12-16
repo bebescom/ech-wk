@@ -1,4 +1,4 @@
-name: Build Android APK
+name: Build Android APK (Manual NDK)
 
 on:
   push:
@@ -10,7 +10,7 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 90
     
     steps:
     - name: Checkout code
@@ -37,12 +37,6 @@ jobs:
       run: |
         python -m pip install --upgrade pip
         pip install buildozer cython==3.0.0
-        
-    - name: Increase Git timeout
-      run: |
-        git config --global http.postBuffer 524288000
-        git config --global http.timeout 300
-        git config --global https.timeout 300
         
     - name: Initialize Go modules (if needed)
       run: |
@@ -71,7 +65,7 @@ jobs:
         # 下载Android NDK（使用curl替代wget，增加重试）
         if [ ! -d "android-ndk-r25b" ]; then
             echo "下载Android NDK r25b..."
-            curl -L --retry 5 --retry-delay 10 --max-time 300 \
+            curl -L --retry 10 --retry-delay 15 --max-time 600 \
               https://dl.google.com/android/repository/android-ndk-r25b-linux.zip \
               -o android-ndk-r25b-linux.zip
             unzip -q android-ndk-r25b-linux.zip
@@ -95,35 +89,45 @@ jobs:
         file ech-workers
         ls -la ech-workers
         
-    - name: Cache Buildozer dependencies
+    - name: Cache Buildozer dependencies and NDK
       uses: actions/cache@v3
       with:
         path: |
           ~/.buildozer
           .buildozer
           ~/.android
-        key: ${{ runner.os }}-buildozer-${{ hashFiles('buildozer.spec') }}
+          android-ndk-r25b
+        key: ${{ runner.os }}-buildozer-ndk-${{ hashFiles('buildozer.spec') }}
         restore-keys: |
-          ${{ runner.os }}-buildozer-
+          ${{ runner.os }}-buildozer-ndk-
           
-    - name: Build Android APK with retries
+    - name: Prepare Buildozer environment with manual NDK
       run: |
-        # 增加网络超时设置
-        export HTTP_TIMEOUT=300
-        export HTTPS_TIMEOUT=300
+        # 创建Buildozer所需的目录结构
+        mkdir -p ~/.buildozer/android/platform
         
-        # 尝试构建，最多重试3次
-        for i in 1 2 3; do
-            echo "尝试构建第 $i 次..."
-            if buildozer -v android debug; then
-                echo "构建成功！"
-                exit 0
-            fi
-            echo "构建失败，等待10秒后重试..."
-            sleep 10
-        done
-        echo "所有尝试都失败了"
-        exit 1
+        # 如果NDK不存在，从之前下载的副本复制
+        if [ ! -d "~/.buildozer/android/platform/android-ndk-r25b" ]; then
+            echo "复制手动下载的NDK到Buildozer目录..."
+            cp -r android-ndk-r25b ~/.buildozer/android/platform/
+        fi
+        
+        # 设置环境变量，告诉Buildozer使用已安装的NDK
+        export ANDROID_NDK_HOME=~/.buildozer/android/platform/android-ndk-r25b
+        
+        # 增加网络超时设置
+        export HTTP_TIMEOUT=600
+        export HTTPS_TIMEOUT=600
+        
+        # 配置git增加超时
+        git config --global http.postBuffer 1048576000
+        git config --global http.timeout 600
+        git config --global https.timeout 600
+        
+    - name: Build Android APK with manual NDK
+      run: |
+        # 运行Buildozer，使用已下载的NDK
+        buildozer -v android debug
       
     - name: Upload APK artifact
       uses: actions/upload-artifact@v4
