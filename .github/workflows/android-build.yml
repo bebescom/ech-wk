@@ -48,9 +48,14 @@ jobs:
             echo "NDK already cached"
           fi
 
-      - name: Build Go binary
+      - name: Build Go binary for Android
         run: |
           chmod +x build_go_android.sh
+          # 先初始化模块并下载依赖（自动生成 go.mod 和 go.sum）
+          go mod init ech-wk || true  # 如果已存在无视错误
+          go get github.com/gorilla/websocket@v1.5.3  # 最新稳定版，纯 Go
+          go mod tidy
+          # 然后运行你的脚本（它会用现有 NDK 编译）
           ./build_go_android.sh
 
       - name: Build APK
