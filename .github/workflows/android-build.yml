@@ -2,8 +2,8 @@ name: Build Android APK
 
 on:
   push:
-    branches: [ main ]  # 或你的分支
-  workflow_dispatch:  # 手动触发
+    branches: [ main ]  # 改成你的分支
+  workflow_dispatch:
 
 jobs:
   build:
@@ -12,15 +12,53 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Build with Buildozer
-        uses: ArtemSBulgakov/buildozer-action@v1
-        id: buildozer
+      - name: Set up Python 3.9
+        uses: actions/setup-python@v5
         with:
-          command: buildozer -v android debug  # 或 release 如果要签名
-          buildozer_version: stable  # 或 latest/master 如果想最新版
+          python-version: '3.9'
 
-      - name: Upload APK
+      - name: Install system dependencies
+        run: |
+          sudo apt update
+          sudo apt install -y git zip unzip openjdk-17-jdk python3-pip autoconf automake libtool pkg-config libgmp3-dev libmpfr-dev libmpc-dev libssl-dev libncurses5-dev libncursesw5-dev libtinfo5
+
+      - name: Install Buildozer and dependencies
+        run: |
+          pip install --upgrade buildozer cython
+
+      - name: Cache Buildozer global directory (~/.buildozer)
+        uses: actions/cache@v4
+        with:
+          path: ~/.buildozer
+          key: buildozer-${{ runner.os }}-${{ hashFiles('buildozer.spec') }}
+          restore-keys: |
+            buildozer-${{ runner.os }}-
+
+      - name: Manually download and install Android NDK r25c (most stable)
+        run: |
+          NDK_DIR=~/.buildozer/android/platform/android-ndk-r25c
+          if [ ! -d "$NDK_DIR" ]; then
+            echo "Downloading NDK r25c..."
+            wget https://dl.google.com/android/repository/android-ndk-r25c-linux.zip -O ndk.zip
+            mkdir -p ~/.buildozer/android/platform
+            unzip -q ndk.zip -d ~/.buildozer/android/platform
+            rm ndk.zip
+            echo "NDK r25c installed"
+          else
+            echo "NDK r25c already cached"
+          fi
+
+      - name: Build Go binary (your project needs this)
+        run: |
+          chmod +x build_go_android.sh
+          ./build_go_android.sh
+
+      - name: Build APK with Buildozer
+        run: |
+          buildozer -v android debug
+
+      - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
           name: ech-wk-apk
-          path: bin/*.apk  # Buildozer 默认输出到 bin 目录
+          path: bin/*.apk
