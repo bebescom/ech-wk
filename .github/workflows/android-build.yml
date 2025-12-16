@@ -1,4 +1,4 @@
-name: Build Android APK (Debug NDK Installation)
+name: Build Android APK (Fixed Size Check)
 
 on:
   push:
@@ -71,10 +71,8 @@ jobs:
         echo "=== 当前目录 ==="
         pwd
         ls -la
-        echo "=== 环境变量 ==="
-        env | sort
         
-    - name: Manually download and install Android components with debug
+    - name: Manually download and install Android components
       run: |
         set -x  # 启用调试输出
         
@@ -83,11 +81,6 @@ jobs:
         mkdir -p ~/.buildozer/android/platform
         mkdir -p ~/.buildozer/cache
         mkdir -p ~/.buildozer/logs
-        
-        # 显示目录权限
-        echo "=== 目录权限 ==="
-        ls -la ~/.buildozer/
-        ls -la ~/.buildozer/android/
         
         # 1. 下载并安装Android NDK r25b
         echo "=== 手动下载Android NDK r25b ==="
@@ -110,17 +103,24 @@ jobs:
                 echo "❌ NDK下载失败"
                 exit 1
             fi
-            
-            # 验证文件大小
-            file_size=$(stat -c%s "$ndk_zip")
-            echo "下载的文件大小: $file_size 字节"
-            
-            # 最小预期大小：约600MB (629145600字节)
-            if [ $file_size -lt 600000000 ]; then
-                echo "❌ NDK文件太小，可能下载不完整"
-                ls -la "$ndk_zip"
-                exit 1
-            fi
+        fi
+        
+        # 验证文件大小（调整为正确的大小检查）
+        file_size=$(stat -c%s "$ndk_zip")
+        echo "下载的文件大小: $file_size 字节"
+        
+        # 正确的最小预期大小：约500MB (524288000字节)
+        # 根据服务器返回的content-length: 530975885
+        min_expected_size=500000000
+        
+        if [ $file_size -lt $min_expected_size ]; then
+            echo "❌ NDK文件太小，可能下载不完整"
+            echo "   实际大小: $file_size 字节"
+            echo "   最小预期: $min_expected_size 字节"
+            ls -la "$ndk_zip"
+            exit 1
+        else
+            echo "✅ NDK文件大小验证通过"
         fi
         
         # 解压NDK
@@ -146,7 +146,7 @@ jobs:
         # 验证解压后的目录
         if [ -d "$target_dir/android-ndk-r25b" ]; then
             echo "✅ NDK解压成功"
-            ls -la "$target_dir/android-ndk-r25b/"
+            ls -la "$target_dir/android-ndk-r25b/" | head -20
             echo "NDK版本信息:"
             cat "$target_dir/android-ndk-r25b/source.properties" 2>/dev/null || echo "无法读取版本信息"
         else
@@ -254,9 +254,9 @@ jobs:
         path: |
           ~/.buildozer
           .buildozer
-        key: ${{ runner.os }}-buildozer-debug-${{ hashFiles('buildozer.spec') }}
+        key: ${{ runner.os }}-buildozer-fixed-${{ hashFiles('buildozer.spec') }}
         restore-keys: |
-          ${{ runner.os }}-buildozer-debug-
+          ${{ runner.os }}-buildozer-fixed-
           
     - name: Patch Buildozer to skip NDK download
       run: |
@@ -299,7 +299,7 @@ jobs:
         # 运行补丁
         python patch_buildozer.py
         
-    - name: Build Android APK with debug logs
+    - name: Build Android APK
       run: |
         echo "=== 开始构建Android APK ==="
         
