@@ -1,4 +1,4 @@
-name: Build Android APK (Force Ignore Symbolic Link Errors)
+name: Build Android APK (Fix ANT Extraction)
 
 on:
   push:
@@ -69,7 +69,7 @@ jobs:
         echo "=== 内存信息 ==="
         free -h
         
-    - name: Manually download and install Android components with force ignore errors
+    - name: Manually download and install Android components with ANT fix
       run: |
         set -x  # 启用调试输出
         
@@ -232,32 +232,56 @@ jobs:
             fi
         fi
         
-        # 3. 下载并安装Apache ANT
+        # 3. 下载并安装Apache ANT - 修复语法错误
         echo "=== 手动下载Apache ANT ==="
         ant_tar="apache-ant-1.9.4-bin.tar.gz"
         ant_url="https://archive.apache.org/dist/ant/binaries/$ant_tar"
         
+        # 检查是否已下载
         if [ ! -f "$ant_tar" ]; then
             echo "正在下载ANT: $ant_url"
-            curl -L --verbose --retry 10 --retry-delay 15 --max-time 600 \
+            curl -L --verbose --retry 15 --retry-delay 20 --max-time 900 \
               --progress-bar --show-error \
               "$ant_url" -o "$ant_tar"
             
+            # 验证下载结果
             if [ $? -ne 0 ]; then
                 echo "❌ ANT下载失败"
                 exit 1
             fi
         fi
         
-        # 解压ANT
+        # 验证ANT文件
+        echo "ANT文件信息:"
+        ls -la "$ant_tar"
+        file "$ant_tar"
+        
+        # 解压ANT - 修复语法错误：将"xzf -v"改为"xzvf"
         ant_dir="$target_dir/apache-ant-1.9.4"
         if [ ! -d "$ant_dir" ]; then
-            tar xzf -v "$ant_tar" -C "$target_dir"
+            echo "正在解压ANT..."
+            # 修复：使用正确的tar语法
+            tar xzvf "$ant_tar" -C "$target_dir"
             
+            # 检查解压结果
             if [ $? -ne 0 ]; then
-                echo "❌ ANT解压失败"
-                exit 1
+                echo "⚠️ tar解压失败，尝试使用7z..."
+                7z x -y "$ant_tar" -o"$target_dir"
+                
+                if [ $? -ne 0 ]; then
+                    echo "❌ ANT解压失败"
+                    exit 1
+                fi
             fi
+        fi
+        
+        # 验证ANT安装
+        if [ -d "$ant_dir" ]; then
+            echo "✅ ANT安装成功"
+            ls -la "$ant_dir"
+        else
+            echo "❌ ANT目录不存在"
+            exit 1
         fi
         
         # 设置环境变量 - 使用智能检测到的NDK目录
@@ -302,9 +326,9 @@ jobs:
         path: |
           ~/.buildozer
           .buildozer
-        key: ${{ runner.os }}-buildozer-force-ignore-${{ hashFiles('buildozer.spec') }}
+        key: ${{ runner.os }}-buildozer-fix-ant-${{ hashFiles('buildozer.spec') }}
         restore-keys: |
-          ${{ runner.os }}-buildozer-force-ignore-
+          ${{ runner.os }}-buildozer-fix-ant-
           
     - name: Patch Buildozer to skip NDK download
       run: |
@@ -401,7 +425,7 @@ jobs:
       if: always()
       uses: actions/upload-artifact@v4
       with:
-        name: build-force-ignore-logs
+        name: build-fix-ant-logs
         path: |
           buildozer.log
           ~/.buildozer/logs/*
