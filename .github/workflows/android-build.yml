@@ -43,26 +43,26 @@ jobs:
             mkdir -p ~/.buildozer/android/platform
             unzip -q ndk.zip -d ~/.buildozer/android/platform
             rm ndk.zip
-            echo "NDK installed"
+            echo "NDK r25c installed"
           else
-            echo "NDK already cached"
+            echo "NDK r25c already cached"
           fi
 
       - name: Build Go binary for Android
         run: |
           chmod +x build_go_android.sh
-          # 先初始化模块并下载依赖（自动生成 go.mod 和 go.sum）
-          go mod init ech-wk || true  # 如果已存在无视错误
-          go get github.com/gorilla/websocket@v1.5.3  # 最新稳定版，纯 Go
+          # 自动处理 Go 模块和依赖
+          go mod init ech-wk || true
+          go get github.com/gorilla/websocket@v1.5.3
           go mod tidy
-          # 然后运行你的脚本（它会用现有 NDK 编译）
+          # 执行交叉编译脚本
           ./build_go_android.sh
 
-      - name: Build APK
+      - name: Build APK with Buildozer
         run: |
           buildozer -v android debug
 
-      - name: Upload APK
+      - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
           name: ech-wk-apk
