@@ -2,7 +2,7 @@ name: Build Android APK
 
 on:
   push:
-    branches: [ main ]  # 改成你的分支
+    branches: [ main ]
   workflow_dispatch:
 
 jobs:
@@ -20,13 +20,13 @@ jobs:
       - name: Install system dependencies
         run: |
           sudo apt update
-          sudo apt install -y git zip unzip openjdk-17-jdk python3-pip autoconf automake libtool pkg-config libgmp3-dev libmpfr-dev libmpc-dev libssl-dev libncurses5-dev libncursesw5-dev libtinfo5
+          sudo apt install -y git zip unzip openjdk-17-jdk python3-pip autoconf automake libtool pkg-config libgmp3-dev libmpfr-dev libmpc-dev libssl-dev libncurses5-dev libncursesw5-dev libtinfo6
 
-      - name: Install Buildozer and dependencies
+      - name: Install Buildozer and Cython
         run: |
           pip install --upgrade buildozer cython
 
-      - name: Cache Buildozer global directory (~/.buildozer)
+      - name: Cache Buildozer global directory
         uses: actions/cache@v4
         with:
           path: ~/.buildozer
@@ -34,7 +34,7 @@ jobs:
           restore-keys: |
             buildozer-${{ runner.os }}-
 
-      - name: Manually download and install Android NDK r25c (most stable)
+      - name: Install Android NDK r25c (cached)
         run: |
           NDK_DIR=~/.buildozer/android/platform/android-ndk-r25c
           if [ ! -d "$NDK_DIR" ]; then
@@ -43,21 +43,21 @@ jobs:
             mkdir -p ~/.buildozer/android/platform
             unzip -q ndk.zip -d ~/.buildozer/android/platform
             rm ndk.zip
-            echo "NDK r25c installed"
+            echo "NDK installed"
           else
-            echo "NDK r25c already cached"
+            echo "NDK already cached"
           fi
 
-      - name: Build Go binary (your project needs this)
+      - name: Build Go binary
         run: |
           chmod +x build_go_android.sh
           ./build_go_android.sh
 
-      - name: Build APK with Buildozer
+      - name: Build APK
         run: |
           buildozer -v android debug
 
-      - name: Upload APK artifact
+      - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: ech-wk-apk
