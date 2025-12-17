@@ -64,7 +64,7 @@ source.exclude_exts = spec,pyc,pyo
 source.include_dirs = .
 
 # (list) Python依赖（必须使用 kivy 作为 GUI 框架）
-requirements = python3,kivy,pillow,requests
+requirements = python3,kivy==2.3.0,pillow,requests,cython==0.29.36
 
 # (str) Python版本
 python.version = 3.9
