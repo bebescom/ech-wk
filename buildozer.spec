@@ -34,7 +34,7 @@ orientation = portrait
 source.dir = .
 
 # (list) 包含的文件扩展名
-source.include_exts = py,png,jpg,kv,atlas,js,sh,go,exe
+source.include_exts = py,kv,txt,bin
 
 # (list) 排除的文件扩展名
 source.exclude_exts = spec,pyc,pyo
