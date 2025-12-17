@@ -4,7 +4,9 @@ title = ECH Workers
 
 # (str) 包名 (格式: com.username.appname)
 package.name = echworkers
+android.enable_aab = False
 android.release_artifact = apk
+android.debug_artifact = apk
 # (str) 包域名 (反序)
 package.domain = org.ech
 
