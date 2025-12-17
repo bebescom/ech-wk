@@ -63,8 +63,18 @@ source.exclude_exts = spec,pyc,pyo
 # (list) 包含的目录
 source.include_dirs = .
 
-# (list) Python依赖（必须使用 kivy 作为 GUI 框架）
-requirements = python3,kivy==2.3.0,pillow,requests,cython==0.29.36
+requirements = python3,kivy==2.3.0,pillow,requests
+
+# 强制旧 Cython（比 requirements 更强）
+p4a.cython = 0.29.36
+
+# 使用稳定 branch
+p4a.branch = stable
+
+# 下载重试增强
+android.download_timeout = 600
+android.download_retry = True
+android.download_max_retries = 20
 
 # (str) Python版本
 python.version = 3.9
@@ -75,14 +85,6 @@ android.permissions = INTERNET,ACCESS_NETWORK_STATE,WRITE_EXTERNAL_STORAGE,READ_
 # (list) Android架构
 android.archs = armeabi-v7a
 
-# (int) 下载超时时间（秒）
-android.download_timeout = 600
-
-# (bool) 允许下载重试
-android.download_retry = True
-
-# (int) 最大重试次数
-android.download_max_retries = 10
 
 # (str) 自定义AndroidManifest.xml模板
 android.manifest.intent_filters = []
