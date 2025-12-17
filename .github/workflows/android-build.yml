@@ -62,7 +62,7 @@ jobs:
           buildozer -v android debug
 
       - name: Find and upload APK (final rescue)
-        if: always
+        if: always   # 必须和 name: 对齐（顶级属性）
         run: |
           echo "Searching for APK in the entire workspace..."
           find /home/runner/work -name "*.apk" -type f || true
@@ -75,7 +75,7 @@ jobs:
           ls -la bin/ || true
 
       - name: Upload APK artifact (rescue)
-        if: always
+        if: always   # 同样顶级属性
         uses: actions/upload-artifact@v4
         with:
           name: ech-wk-apk-rescue
