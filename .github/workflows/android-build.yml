@@ -58,9 +58,6 @@ jobs:
         run: |
           yes | ~/.buildozer/android/platform/android-sdk/tools/bin/sdkmanager --licenses || true
           
-      - name: Clean old build
-        run: |
-          buildozer android clean
 
       - name: Build APK with Buildozer
         run: |
