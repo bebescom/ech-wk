@@ -61,24 +61,24 @@ jobs:
         run: |
           buildozer -v android debug
 
-      - name: Find and upload APK (final final rescue)
-        if: ${{always()}}
+      - name: Find and copy APK (ultimate rescue)
+        if: ${{always()}
         run: |
           echo "Searching for APK..."
           find .buildozer -name "*.apk" -type f || true
           
           mkdir -p bin
-          # 精准复制两个标准路径
+          # sdl2 bootstrap 的标准 debug APK 路径
           cp .buildozer/android/platform/build-armeabi-v7a/dists/echworkers/build/outputs/apk/debug/*.apk bin/ 2>/dev/null || true
           cp .buildozer/android/platform/build-armeabi-v7a/dists/echworkers/bin/*.apk bin/ 2>/dev/null || true
-          # 广搜备份
+          # 广搜
           find .buildozer -name "*.apk" -exec cp {} bin/ \; || true
           
-          echo "Final bin content:"
+          echo "Bin content:"
           ls -la bin/ || true
 
-      - name: Upload APK artifact (final rescue)
-        if: ${{always()}}
+      - name: Upload APK artifact (ultimate rescue)
+        if: ${{always()}
         uses: actions/upload-artifact@v4
         with:
           name: ech-wk-apk
