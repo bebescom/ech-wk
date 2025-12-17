@@ -1,4 +1,4 @@
-name: Build Android APK (Simple Java Fix)
+name: Build Android APK (Fix Python Shared Library)
 
 on:
   push:
@@ -22,8 +22,6 @@ jobs:
       with:
         java-version: '17'
         distribution: 'temurin'
-        # ✅ 移除 Gradle 缓存配置，因为我们的项目不是纯 Gradle 项目
-        # cache: gradle  # 这会导致找不到文件的错误
 
     - name: Install system dependencies
       run: |
@@ -32,19 +30,26 @@ jobs:
           autoconf automake libtool pkg-config libgmp3-dev libmpfr-dev libmpc-dev \
           libssl-dev libncurses5-dev libncursesw5-dev libtinfo6 libltdl-dev \
           libsdl2-dev libsdl2-image-dev libsdl2-mixer-dev libsdl2-ttf-dev \
-          libportmidi-dev libswscale-dev libavformat-dev libavcodec-dev zlib1g-dev
+          libportmidi-dev libswscale-dev libavformat-dev libavcodec-dev zlib1g-dev \
+          # Python 共享库所需的额外依赖
+          libpython3-dev python3-dev libffi-dev
 
-    - name: Clean ALL previous builds
+    - name: Clean ALL previous builds (彻底清理)
       run: |
         echo "Performing deep clean of previous builds..."
+        # 清理 Buildozer 缓存
         rm -rf ~/.buildozer
         rm -rf .buildozer
+        # 清理 Python 缓存
         rm -rf __pycache__
         rm -rf *.pyc
+        # 清理构建输出
         rm -rf bin/
         rm -rf dist/
         rm -rf build/
+        # 清理 Go 相关文件
         rm -rf go.mod go.sum
+        # 创建必要目录
         mkdir -p bin
 
     - name: Install Buildozer and dependencies
@@ -70,7 +75,7 @@ jobs:
         go mod tidy
         ./build_go_android.sh
 
-    - name: Fix buildozer.spec configuration
+    - name: Fix buildozer.spec configuration (增强版)
       run: |
         echo "Fixing buildozer.spec configuration..."
         
@@ -93,13 +98,18 @@ jobs:
         content = re.sub(r'requirements = .*', 'requirements = python3==3.10.13,kivy==2.3.0,pillow,requests', content)
         
         # 确保包含所有必要的文件
-        content = re.sub(r'source\.include_exts = .*', 'source.include_exts = py,kv,txt,bin,png,jpg,js,sh,go,exe,c,h', content)
+        content = re.sub(r'source\.include_exts = .*', 'source.include_exts = py,kv,txt,bin,png,jpg,js,sh,go,exe,c,h,so', content)
+        
+        # 添加 Python 共享库配置
+        if 'p4a.python_recipe = python3crystax' not in content:
+            content += '\n# Python 共享库配置\np4a.python_recipe = python3crystax\n'
         
         # 保存修复后的配置文件
         with open('buildozer.spec.fixed', 'w') as f:
             f.write(content)
         
         print("✅ buildozer.spec 已修复")
+        print("✅ 添加了 Python 共享库配置")
         EOF
         
         # 运行修复脚本
@@ -109,11 +119,11 @@ jobs:
         cp buildozer.spec.fixed buildozer.spec
         echo "✅ 使用修复后的 buildozer.spec"
 
-    - name: Build with Buildozer (使用 Java 17)
+    - name: Build with Buildozer (使用 Python 共享库修复)
       id: build_step
       continue-on-error: true
       run: |
-        echo "Starting Buildozer build with Java 17..."
+        echo "Starting Buildozer build with Python shared library fix..."
         
         # 确保使用 Java 17
         export JAVA_HOME=${{ steps.setup-java.outputs.path }}
@@ -133,6 +143,28 @@ jobs:
           echo "build_success=true" >> $GITHUB_OUTPUT
         else
           echo "build_success=false" >> $GITHUB_OUTPUT
+        fi
+
+    - name: Python Shared Library Debug
+      if: ${{ failure() }}
+      run: |
+        echo "========================================"
+        echo "🔍 Python Shared Library Debug"
+        echo "========================================"
+        
+        # 检查 Python 构建目录
+        PYTHON_DIR=".buildozer/android/platform/build-armeabi-v7a/build/other_builds/python3"
+        echo "Python build directory: $PYTHON_DIR"
+        
+        if [ -d "$PYTHON_DIR" ]; then
+          echo "✅ Python build directory exists"
+          echo "Directory contents:"
+          ls -la "$PYTHON_DIR"
+          
+          # 检查 Python 共享库
+          find "$PYTHON_DIR" -name "libpython*.so" -o -name "python_shared.*" | head -20
+        else
+          echo "❌ Python build directory does not exist"
         fi
 
     - name: Ultimate APK Rescue Mission
