@@ -1,4 +1,4 @@
-name: Build Android APK (Fix Kivy Compile)
+name: Build Android APK (Fix Java Version)
 
 on:
   push:
@@ -17,31 +17,33 @@ jobs:
       with:
         python-version: "3.10"
 
+    - name: Install Java 17 (Required for Gradle)
+      uses: actions/setup-java@v4
+      with:
+        java-version: '17'
+        distribution: 'temurin'
+        cache: gradle
+
     - name: Install system dependencies
       run: |
         sudo apt update
-        sudo apt install -y git zip unzip openjdk-17-jdk python3-pip \
+        sudo apt install -y git zip unzip python3-pip \
           autoconf automake libtool pkg-config libgmp3-dev libmpfr-dev libmpc-dev \
           libssl-dev libncurses5-dev libncursesw5-dev libtinfo6 libltdl-dev \
           libsdl2-dev libsdl2-image-dev libsdl2-mixer-dev libsdl2-ttf-dev \
           libportmidi-dev libswscale-dev libavformat-dev libavcodec-dev zlib1g-dev
 
-    - name: Clean ALL previous builds (彻底清理)
+    - name: Clean ALL previous builds
       run: |
         echo "Performing deep clean of previous builds..."
-        # 清理 Buildozer 缓存
         rm -rf ~/.buildozer
         rm -rf .buildozer
-        # 清理 Python 缓存
         rm -rf __pycache__
         rm -rf *.pyc
-        # 清理构建输出
         rm -rf bin/
         rm -rf dist/
         rm -rf build/
-        # 清理 Go 相关文件
         rm -rf go.mod go.sum
-        # 创建必要目录
         mkdir -p bin
 
     - name: Install Buildozer and dependencies
@@ -51,7 +53,7 @@ jobs:
         pip install buildozer==1.5.0
         pip install python-for-android==2024.01.21
 
-    - name: Install Android NDK r25c (重新安装)
+    - name: Install Android NDK r25c
       run: |
         echo "Installing Android NDK r25c..."
         mkdir -p ~/.buildozer/android/platform
@@ -106,14 +108,19 @@ jobs:
         cp buildozer.spec.fixed buildozer.spec
         echo "✅ 使用修复后的 buildozer.spec"
 
-    - name: Build with Buildozer (增加详细日志)
+    - name: Build with Buildozer (使用 Java 17)
       id: build_step
       continue-on-error: true
       run: |
-        echo "Starting Buildozer build with Kivy fix..."
+        echo "Starting Buildozer build with Java 17..."
         
-        # 增加详细日志
-        export BUILDOZER_LOG_LEVEL=2
+        # 确保使用 Java 17
+        export JAVA_HOME=${{ steps.setup-java.outputs.path }}
+        export PATH=$JAVA_HOME/bin:$PATH
+        
+        # 验证 Java 版本
+        java -version
+        javac -version
         
         # 运行 buildozer 并捕获所有输出
         buildozer -v android debug 2>&1 | tee buildozer_build.log
@@ -123,36 +130,6 @@ jobs:
           echo "build_success=true" >> $GITHUB_OUTPUT
         else
           echo "build_success=false" >> $GITHUB_OUTPUT
-        fi
-
-    - name: Kivy Source Code Debug
-      if: ${{ failure() }}
-      run: |
-        echo "========================================"
-        echo "🔍 Kivy Source Code Debug"
-        echo "========================================"
-        
-        # 检查 Kivy 源代码目录
-        KIVY_DIR=".buildozer/android/platform/build-armeabi-v7a/build/other_builds/kivy/armeabi-v7a__ndk_target_21/kivy"
-        echo "Kivy directory: $KIVY_DIR"
-        
-        if [ -d "$KIVY_DIR" ]; then
-          echo "✅ Kivy directory exists"
-          echo "Directory contents:"
-          ls -la "$KIVY_DIR"
-          
-          # 检查 graphics 目录
-          GRAPHICS_DIR="$KIVY_DIR/kivy/graphics"
-          echo -e "\nGraphics directory: $GRAPHICS_DIR"
-          if [ -d "$GRAPHICS_DIR" ]; then
-            echo "✅ Graphics directory exists"
-            echo "Graphics files:"
-            ls -la "$GRAPHICS_DIR" | grep "\.c$"
-          else
-            echo "❌ Graphics directory does not exist"
-          fi
-        else
-          echo "❌ Kivy directory does not exist"
         fi
 
     - name: Ultimate APK Rescue Mission
@@ -166,8 +143,20 @@ jobs:
         mkdir -p rescued_apks
         found_apks=0
         
-        # 搜索 APK 文件
-        find . -name "*.apk" -type f | while read -r apk_file; do
+        # 搜索所有可能的 APK 位置
+        echo "📁 Searching for APK files in all possible locations..."
+        
+        # 搜索 .buildozer 目录
+        if [ -d ".buildozer" ]; then
+          find .buildozer -name "*.apk" -type f | while read -r apk_file; do
+            echo "✅ Found APK: $apk_file"
+            cp "$apk_file" "rescued_apks/$(basename "$apk_file")"
+            found_apks=$((found_apks + 1))
+          done
+        fi
+        
+        # 搜索项目根目录
+        find . -maxdepth 5 -name "*.apk" -type f ! -path "./rescued_apks/*" | while read -r apk_file; do
           echo "✅ Found APK: $apk_file"
           cp "$apk_file" "rescued_apks/$(basename "$apk_file")"
           found_apks=$((found_apks + 1))
@@ -184,6 +173,7 @@ jobs:
         # 创建构建信息
         echo "Build completed at: $(date)" > rescued_apks/build_info.txt
         echo "Build success: ${{ steps.build_step.outputs.build_success }}" >> rescued_apks/build_info.txt
+        echo "Java version used: $(java -version 2>&1 | head -n 1)" >> rescued_apks/build_info.txt
         echo "Go binary built: $(ls ech-workers 2>/dev/null && echo "Yes" || echo "No")" >> rescued_apks/build_info.txt
         
         # 复制日志文件
@@ -191,7 +181,7 @@ jobs:
         cp buildozer.log rescued_apks/ 2>/dev/null || true
         cp buildozer.spec rescued_apks/buildozer.spec.used 2>/dev/null || true
 
-    - name: Upload Everything
+    - name: Upload Everything (构建产物 + 日志)
       if: ${{ always() }}
       uses: actions/upload-artifact@v4
       with:
@@ -210,5 +200,6 @@ jobs:
         echo "========================================"
         echo "Build Success: ${{ steps.build_step.outputs.build_success }}"
         echo "APK Files Found: $(ls rescued_apks/*.apk 2>/dev/null | wc -l)"
+        echo "Java Version: $(java -version 2>&1 | head -n 1)"
         echo "Go Binary Built: $(ls ech-workers 2>/dev/null && echo "✅ Yes" || echo "❌ No")"
         echo "========================================"
