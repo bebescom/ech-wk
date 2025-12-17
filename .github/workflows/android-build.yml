@@ -1,4 +1,4 @@
-name: Build Android APK (Emergency Fix)
+name: Build Android APK (Fix Kivy Compile)
 
 on:
   push:
@@ -22,41 +22,42 @@ jobs:
         sudo apt update
         sudo apt install -y git zip unzip openjdk-17-jdk python3-pip \
           autoconf automake libtool pkg-config libgmp3-dev libmpfr-dev libmpc-dev \
-          libssl-dev libncurses5-dev libncursesw5-dev libtinfo6 libltdl-dev
+          libssl-dev libncurses5-dev libncursesw5-dev libtinfo6 libltdl-dev \
+          libsdl2-dev libsdl2-image-dev libsdl2-mixer-dev libsdl2-ttf-dev \
+          libportmidi-dev libswscale-dev libavformat-dev libavcodec-dev zlib1g-dev
 
-    - name: Clean previous builds
+    - name: Clean ALL previous builds (彻底清理)
       run: |
-        echo "Cleaning previous build artifacts..."
-        rm -rf ~/.buildozer/android/platform/python-for-android
-        rm -rf ~/.buildozer/android/platform/build-armeabi-v7a
+        echo "Performing deep clean of previous builds..."
+        # 清理 Buildozer 缓存
+        rm -rf ~/.buildozer
+        rm -rf .buildozer
+        # 清理 Python 缓存
+        rm -rf __pycache__
+        rm -rf *.pyc
+        # 清理构建输出
         rm -rf bin/
+        rm -rf dist/
+        rm -rf build/
+        # 清理 Go 相关文件
+        rm -rf go.mod go.sum
+        # 创建必要目录
         mkdir -p bin
 
     - name: Install Buildozer and dependencies
       run: |
-        python -m pip install --upgrade pip setuptools
+        python -m pip install --upgrade pip setuptools wheel
         pip install cython==0.29.36
         pip install buildozer==1.5.0
         pip install python-for-android==2024.01.21
 
-    - name: Cache Buildozer global directory
-      uses: actions/cache@v4
-      with:
-        path: ~/.buildozer
-        key: buildozer-${{ runner.os }}-${{ hashFiles('buildozer.spec') }}
-        restore-keys: |
-          buildozer-${{ runner.os }}-
-
-    - name: Install Android NDK r25c
+    - name: Install Android NDK r25c (重新安装)
       run: |
-        NDK_DIR=~/.buildozer/android/platform/android-ndk-r25c
-        if [ ! -d "$NDK_DIR" ]; then
-          echo "Downloading NDK r25c..."
-          wget https://dl.google.com/android/repository/android-ndk-r25c-linux.zip -O ndk.zip
-          mkdir -p ~/.buildozer/android/platform
-          unzip -q ndk.zip -d ~/.buildozer/android/platform
-          rm ndk.zip
-        fi
+        echo "Installing Android NDK r25c..."
+        mkdir -p ~/.buildozer/android/platform
+        wget https://dl.google.com/android/repository/android-ndk-r25c-linux.zip -O ndk.zip
+        unzip -q ndk.zip -d ~/.buildozer/android/platform
+        rm ndk.zip
 
     - name: Build Go binary for Android
       run: |
@@ -66,7 +67,7 @@ jobs:
         go mod tidy
         ./build_go_android.sh
 
-    - name: Fix buildozer.spec configuration (关键修复)
+    - name: Fix buildozer.spec configuration
       run: |
         echo "Fixing buildozer.spec configuration..."
         
@@ -88,6 +89,9 @@ jobs:
         content = re.sub(r'python\.version = .*', 'python.version = 3.10', content)
         content = re.sub(r'requirements = .*', 'requirements = python3==3.10.13,kivy==2.3.0,pillow,requests', content)
         
+        # 确保包含所有必要的文件
+        content = re.sub(r'source\.include_exts = .*', 'source.include_exts = py,kv,txt,bin,png,jpg,js,sh,go,exe,c,h', content)
+        
         # 保存修复后的配置文件
         with open('buildozer.spec.fixed', 'w') as f:
             f.write(content)
@@ -102,13 +106,16 @@ jobs:
         cp buildozer.spec.fixed buildozer.spec
         echo "✅ 使用修复后的 buildozer.spec"
 
-    - name: Build with Buildozer (捕获所有输出)
+    - name: Build with Buildozer (增加详细日志)
       id: build_step
       continue-on-error: true
       run: |
-        echo "Starting Buildozer build with fixed configuration..."
+        echo "Starting Buildozer build with Kivy fix..."
         
-        # 运行buildozer并捕获所有输出
+        # 增加详细日志
+        export BUILDOZER_LOG_LEVEL=2
+        
+        # 运行 buildozer 并捕获所有输出
         buildozer -v android debug 2>&1 | tee buildozer_build.log
         
         # 检查构建是否成功
@@ -116,6 +123,36 @@ jobs:
           echo "build_success=true" >> $GITHUB_OUTPUT
         else
           echo "build_success=false" >> $GITHUB_OUTPUT
+        fi
+
+    - name: Kivy Source Code Debug
+      if: ${{ failure() }}
+      run: |
+        echo "========================================"
+        echo "🔍 Kivy Source Code Debug"
+        echo "========================================"
+        
+        # 检查 Kivy 源代码目录
+        KIVY_DIR=".buildozer/android/platform/build-armeabi-v7a/build/other_builds/kivy/armeabi-v7a__ndk_target_21/kivy"
+        echo "Kivy directory: $KIVY_DIR"
+        
+        if [ -d "$KIVY_DIR" ]; then
+          echo "✅ Kivy directory exists"
+          echo "Directory contents:"
+          ls -la "$KIVY_DIR"
+          
+          # 检查 graphics 目录
+          GRAPHICS_DIR="$KIVY_DIR/kivy/graphics"
+          echo -e "\nGraphics directory: $GRAPHICS_DIR"
+          if [ -d "$GRAPHICS_DIR" ]; then
+            echo "✅ Graphics directory exists"
+            echo "Graphics files:"
+            ls -la "$GRAPHICS_DIR" | grep "\.c$"
+          else
+            echo "❌ Graphics directory does not exist"
+          fi
+        else
+          echo "❌ Kivy directory does not exist"
         fi
 
     - name: Ultimate APK Rescue Mission
@@ -129,56 +166,32 @@ jobs:
         mkdir -p rescued_apks
         found_apks=0
         
-        # 1. 搜索所有可能的APK位置
-        echo "📁 Searching for APK files in all possible locations..."
-        
-        # 搜索.buildozer目录下的所有APK（如果存在）
-        if [ -d ".buildozer" ]; then
-          find .buildozer -name "*.apk" -type f | while read -r apk_file; do
-            echo "✅ Found APK: $apk_file"
-            cp "$apk_file" "rescued_apks/$(basename "$apk_file")"
-            found_apks=$((found_apks + 1))
-          done
-        else
-          echo "⚠️ .buildozer directory not found"
-        fi
-        
-        # 搜索项目根目录下的APK
-        find . -maxdepth 5 -name "*.apk" -type f ! -path "./rescued_apks/*" | while read -r apk_file; do
+        # 搜索 APK 文件
+        find . -name "*.apk" -type f | while read -r apk_file; do
           echo "✅ Found APK: $apk_file"
           cp "$apk_file" "rescued_apks/$(basename "$apk_file")"
           found_apks=$((found_apks + 1))
         done
         
-        # 2. 检查是否找到APK
+        # 检查是否找到 APK
         if [ $found_apks -gt 0 ]; then
           echo "🎉 Found $found_apks APK file(s)!"
           ls -la rescued_apks/
         else
-          echo "❌ No APK files found in any location"
+          echo "❌ No APK files found"
         fi
         
-        # 3. 即使没有找到APK，也创建一个标记文件
+        # 创建构建信息
         echo "Build completed at: $(date)" > rescued_apks/build_info.txt
         echo "Build success: ${{ steps.build_step.outputs.build_success }}" >> rescued_apks/build_info.txt
         echo "Go binary built: $(ls ech-workers 2>/dev/null && echo "Yes" || echo "No")" >> rescued_apks/build_info.txt
         
-        # 4. 复制构建日志和配置文件
-        if [ -f buildozer_build.log ]; then
-          cp buildozer_build.log rescued_apks/
-        fi
-        if [ -f buildozer.log ]; then
-          cp buildozer.log rescued_apks/
-        fi
-        if [ -f buildozer.spec ]; then
-          cp buildozer.spec rescued_apks/buildozer.spec.used
-        fi
-        
-        echo "========================================"
-        echo "🔍 Ultimate APK Rescue Mission Completed"
-        echo "========================================"
+        # 复制日志文件
+        cp buildozer_build.log rescued_apks/ 2>/dev/null || true
+        cp buildozer.log rescued_apks/ 2>/dev/null || true
+        cp buildozer.spec rescued_apks/buildozer.spec.used 2>/dev/null || true
 
-    - name: Upload Everything (构建产物 + 日志)
+    - name: Upload Everything
       if: ${{ always() }}
       uses: actions/upload-artifact@v4
       with:
@@ -199,9 +212,3 @@ jobs:
         echo "APK Files Found: $(ls rescued_apks/*.apk 2>/dev/null | wc -l)"
         echo "Go Binary Built: $(ls ech-workers 2>/dev/null && echo "✅ Yes" || echo "❌ No")"
         echo "========================================"
-        
-        # 如果构建失败但找到了APK，给出警告
-        if [ "${{ steps.build_step.outputs.build_success }}" = "false" ] && [ $(ls rescued_apks/*.apk 2>/dev/null | wc -l) -gt 0 ]; then
-          echo "⚠️ WARNING: Build failed but APK files were found!"
-          echo "⚠️ These APKs might be from a previous successful build"
-        fi
