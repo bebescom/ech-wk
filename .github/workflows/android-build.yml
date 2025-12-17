@@ -24,10 +24,14 @@ jobs:
         sudo apt install -y git zip unzip openjdk-17-jdk python3-pip \
         autoconf automake libtool pkg-config libgmp3-dev libmpfr-dev libmpc-dev \
         libssl-dev libncurses5-dev libncursesw5-dev libtinfo6 libltdl-dev
-
+    - name: HARD CLEAN python-for-android
+      run: |
+        rm -rf ~/.buildozer/android/platform/python-for-android
+        rm -rf ~/.buildozer/android/platform/build-armeabi-v7a
+      
     - name: Install Buildozer and python-for-android
       run: |
-        python3 -m pip install --upgrade pip setuptools
+        python -m pip install --upgrade pip setuptools
         pip install cython==0.29.36
         pip install buildozer==1.5.0
         pip install python-for-android==2024.01.21
