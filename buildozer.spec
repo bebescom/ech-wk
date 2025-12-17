@@ -38,7 +38,7 @@ source.include_exts = py,kv,txt,bin
 
 # (list) 排除的文件扩展名
 source.exclude_exts = spec,pyc,pyo
-source.exclude_patterns = android-ndk-r25b/toolchains/llvm/prebuilt/linux-x86_64/share/clang/*.py, android-ndk-r25b/sources/third_party/googletest/scripts/*.py
+source.exclude_patterns = android-ndk-r25*/**/*.py
 # (list) 包含的目录
 source.include_dirs = .
 
