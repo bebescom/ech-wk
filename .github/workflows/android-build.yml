@@ -61,18 +61,23 @@ jobs:
         run: |
           buildozer -v android debug
 
-      - name: Find and copy APK (rescue)
-        if: always
+      - name: Find and upload APK (final rescue)
+        if: ${{ always() }}
         run: |
-          echo "Searching for generated APK..."
-          find .buildozer -name "*.apk" -type f
+          echo "Searching for APK in the entire workspace..."
+          find /home/runner/work -name "*.apk" -type f || true
+          find . -name "*.apk" -type f || true
+          find .buildozer -name "*.apk" -type f || true
+          
           mkdir -p bin
           find .buildozer -name "*.apk" -exec cp {} bin/ \; || true
-          ls -la bin/ || echo "No APK copied yet"
+          
+          echo "Content of bin directory:"
+          ls -la bin/ || true
 
       - name: Upload APK artifact (rescue)
-        if: always
+        if: ${{ always() }}
         uses: actions/upload-artifact@v4
         with:
-          name: ech-wk-apk
+          name: ech-wk-apk-rescue
           path: bin/*.apk
