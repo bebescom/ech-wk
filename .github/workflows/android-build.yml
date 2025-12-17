@@ -68,7 +68,7 @@ jobs:
         buildozer -v android debug
 
     - name: Ultimate APK rescue (list and copy)
-      if: always
+      if: ${{ always() }}
       run: |
         echo "Listing dist directory..."
         ls -la .buildozer/android/platform/build-armeabi-v7a/dists/echworkers/ || true
@@ -84,7 +84,7 @@ jobs:
         ls -la bin/ || true
 
     - name: Upload APK artifact (ultimate)
-      if: always
+      if: ${{ always() }}
       uses: actions/upload-artifact@v4
       with:
         name: ech-wk-apk
