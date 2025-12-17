@@ -1,4 +1,4 @@
-name: Build Android APK/AAB
+name: Build Android APK
 
 on:
   push:
@@ -9,112 +9,70 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
+      - name: Checkout code
+        uses: actions/checkout@v4
 
-    - name: Set up Python 3.10 (修复编译错误)
-      uses: actions/setup-python@v5
-      with:
-        python-version: '3.10'
+      - name: Set up Python 3.9
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.9'
 
-    - name: Install system dependencies
-      run: |
-        sudo apt update
-        sudo apt install -y git zip unzip openjdk-17-jdk python3-pip \
-          autoconf automake libtool pkg-config libgmp3-dev libmpfr-dev \
-          libmpc-dev libssl-dev libncurses5-dev libncursesw5-dev \
-          libtinfo6 libltdl-dev
+      - name: Install system dependencies
+        run: |
+          sudo apt update
+          sudo apt install -y git zip unzip openjdk-17-jdk python3-pip autoconf automake libtool pkg-config libgmp3-dev libmpfr-dev libmpc-dev libssl-dev libncurses5-dev libncursesw5-dev libtinfo6 libltdl-dev
 
-    - name: Install AAB-supported Buildozer
-      run: |
-        pip install --upgrade cython==0.29.36
-        pip install git+https://github.com/misl6/buildozer.git@feat/aab-support
+      - name: Install latest Buildozer (master branch)
+        run: |
+          pip install --upgrade cython==0.29.36
+          pip install "https://github.com/kivy/buildozer/archive/master.zip"
 
-    - name: Cache Buildozer global directory
-      uses: actions/cache@v4
-      with:
-        path: ~/.buildozer
-        key: buildozer-${{ runner.os }}-${{ hashFiles('buildozer.spec') }}
-        restore-keys: |
-          buildozer-${{ runner.os }}-
+      - name: Cache Buildozer global directory
+        uses: actions/cache@v4
+        with:
+          path: ~/.buildozer
+          key: buildozer-${{ runner.os }}-${{ hashFiles('buildozer.spec') }}
+          restore-keys: |
+            buildozer-${{ runner.os }}-
 
-    - name: Cache Python build (优化构建速度)
-      uses: actions/cache@v4
-      with:
-        path: .buildozer/android/platform/build-armeabi-v7a/build/other_builds/python3
-        key: python3-build-${{ runner.os }}-${{ hashFiles('buildozer.spec') }}
-        restore-keys: |
-          python3-build-${{ runner.os }}-
+      - name: Install Android NDK r25c (cached)
+        run: |
+          NDK_DIR=~/.buildozer/android/platform/android-ndk-r25c
+          if [ ! -d "$NDK_DIR" ]; then
+            echo "Downloading NDK r25c..."
+            wget https://dl.google.com/android/repository/android-ndk-r25c-linux.zip -O ndk.zip
+            mkdir -p ~/.buildozer/android/platform
+            unzip -q ndk.zip -d ~/.buildozer/android/platform
+            rm ndk.zip
+            echo "NDK r25c installed"
+          else
+            echo "NDK r25c already cached"
+          fi
 
-    - name: Install Android NDK r25c (cached)
-      run: |
-        NDK_DIR=~/.buildozer/android/platform/android-ndk-r25c
-        if [ ! -d "$NDK_DIR" ]; then
-          echo "Downloading NDK r25c..."
-          wget https://dl.google.com/android/repository/android-ndk-r25c-linux.zip -O ndk.zip
-          mkdir -p ~/.buildozer/android/platform
-          unzip -q ndk.zip -d ~/.buildozer/android/platform
-          rm ndk.zip
-          echo "NDK r25c installed"
-        else
-          echo "NDK r25c already cached"
-        fi
+      - name: Build Go binary for Android
+        run: |
+          chmod +x build_go_android.sh
+          go mod init ech-wk || true
+          go get github.com/gorilla/websocket@v1.5.3
+          go mod tidy
+          ./build_go_android.sh
 
-    - name: Build Go binary for Android
-      run: |
-        chmod +x build_go_android.sh
-        go mod init ech-wk || true
-        go get github.com/gorilla/websocket@v1.5.3
-        go mod tidy
-        ./build_go_android.sh
+      - name: Build APK with Buildozer
+        run: |
+          buildozer -v android debug
 
-    - name: Accept Android SDK licenses
-      run: |
-        yes | ~/.buildozer/android/platform/android-sdk/tools/bin/sdkmanager --licenses || true
+      - name: Find and copy APK (rescue)
+        if: always
+        run: |
+          echo "Searching for generated APK..."
+          find .buildozer -name "*.apk" -type f
+          mkdir -p bin
+          find .buildozer -name "*.apk" -exec cp {} bin/ \; || true
+          ls -la bin/ || echo "No APK copied yet"
 
-    - name: Build with Buildozer (带错误处理)
-      run: |
-        echo "Starting Buildozer build..."
-        buildozer -v android debug || (
-          echo "Build failed, showing logs..."
-          cat buildozer.log
-          exit 1
-        )
-
-    - name: Find and collect artifacts
-      run: |
-        echo "Searching for built artifacts..."
-        mkdir -p output_artifacts
-        
-        # 查找 APK 文件
-        find .buildozer -name "*.apk" -type f | while read -r file; do
-          echo "Found APK: $file"
-          cp "$file" output_artifacts/
-        done
-        
-        # 查找 AAB 文件
-        find .buildozer -name "*.aab" -type f | while read -r file; do
-          echo "Found AAB: $file"
-          cp "$file" output_artifacts/
-        done
-        
-        # 显示收集到的文件
-        echo "Collected artifacts:"
-        ls -la output_artifacts/ || true
-
-    - name: Upload build artifacts
-      uses: actions/upload-artifact@v4
-      with:
-        name: ech-wk-android-artifacts
-        path: output_artifacts/*
-        if-no-files-found: warn
-
-    - name: Verify build success
-      run: |
-        if ls output_artifacts/*.apk 1> /dev/null 2>&1 || ls output_artifacts/*.aab 1> /dev/null 2>&1; then
-          echo "✅ Build successful! Artifacts generated."
-          exit 0
-        else
-          echo "❌ Build failed! No artifacts found."
-          exit 1
-        fi
+      - name: Upload APK artifact (rescue)
+        if: always
+        uses: actions/upload-artifact@v4
+        with:
+          name: ech-wk-apk
+          path: bin/*.apk
