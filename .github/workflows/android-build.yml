@@ -1,4 +1,4 @@
-name: Build Android APK
+name: Build Android AAB/APK
 
 on:
   push:
@@ -9,71 +9,78 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+    - name: Checkout code
+      uses: actions/checkout@v4
 
-      - name: Set up Python 3.9
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.9'
-      - name: Install system dependencies
-        run: |
-          sudo apt update
-          sudo apt install -y git zip unzip openjdk-17-jdk python3-pip autoconf automake libtool pkg-config libgmp3-dev libmpfr-dev libmpc-dev libssl-dev libncurses5-dev libncursesw5-dev libtinfo6 libltdl-dev
-      - name: Install latest Buildozer from git
-        run: |
-          pip install --upgrade cython==0.29.36
-          pip install "https://github.com/kivy/buildozer/archive/master.zip"
+    - name: Set up Python 3.9
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.9'
 
-      - name: Cache Buildozer global directory
-        uses: actions/cache@v4
-        with:
-          path: ~/.buildozer
-          key: buildozer-${{ runner.os }}-${{ hashFiles('buildozer.spec') }}
-          restore-keys: |
-            buildozer-${{ runner.os }}-
+    - name: Install system dependencies
+      run: |
+        sudo apt update
+        sudo apt install -y git zip unzip openjdk-17-jdk python3-pip \
+          autoconf automake libtool pkg-config libgmp3-dev libmpfr-dev \
+          libmpc-dev libssl-dev libncurses5-dev libncursesw5-dev \
+          libtinfo6 libltdl-dev
 
-      - name: Install Android NDK r25c (cached)
-        run: |
-          NDK_DIR=~/.buildozer/android/platform/android-ndk-r25c
-          if [ ! -d "$NDK_DIR" ]; then
-            echo "Downloading NDK r25c..."
-            wget https://dl.google.com/android/repository/android-ndk-r25c-linux.zip -O ndk.zip
-            mkdir -p ~/.buildozer/android/platform
-            unzip -q ndk.zip -d ~/.buildozer/android/platform
-            rm ndk.zip
-            echo "NDK r25c installed"
-          else
-            echo "NDK already cached"
-          fi
+    - name: Install AAB-supported Buildozer (关键修复)
+      run: |
+        pip install --upgrade cython==0.29.36
+        # 安装支持AAB的Buildozer版本
+        pip install git+https://github.com/misl6/buildozer.git@feat/aab-support
 
-      - name: Build Go binary for Android
-        run: |
-          chmod +x build_go_android.sh
-          go mod init ech-wk || true
-          go get github.com/gorilla/websocket@v1.5.3
-          go mod tidy
-          ./build_go_android.sh
+    - name: Cache Buildozer global directory
+      uses: actions/cache@v4
+      with:
+        path: ~/.buildozer
+        key: buildozer-${{ runner.os }}-${{ hashFiles('buildozer.spec') }}
+        restore-keys: |
+          buildozer-${{ runner.os }}-
 
-      - name: Accept Android SDK licenses
-        run: |
-          yes | ~/.buildozer/android/platform/android-sdk/tools/bin/sdkmanager --licenses || true
-          
+    - name: Install Android NDK r25c (cached)
+      run: |
+        NDK_DIR=~/.buildozer/android/platform/android-ndk-r25c
+        if [ ! -d "$NDK_DIR" ]; then
+          echo "Downloading NDK r25c..."
+          wget https://dl.google.com/android/repository/android-ndk-r25c-linux.zip -O ndk.zip
+          mkdir -p ~/.buildozer/android/platform
+          unzip -q ndk.zip -d ~/.buildozer/android/platform
+          rm ndk.zip
+          echo "NDK r25c installed"
+        else
+          echo "NDK already cached"
+        fi
 
-      - name: Build APK with Buildozer
-        run: |
-          buildozer -v android debug --no-aab
-          
-      - name: Upload APK artifact (final force upload)
-        if: always()  # 强制执行，即使失败
-        uses: actions/upload-artifact@v4
-        with:
-          name: ech-wk-apk
-          path: |
-            .buildozer/android/platform/build-armeabi-v7a/dists/**/echworkers-debug.apk
-            .buildozer/android/platform/build-armeabi-v7a/dists/**/echworkers-*.apk
-            .buildozer/android/platform/build-armeabi-v7a/dists/**/bin/**/echworkers-*.apk
-            .buildozer/android/platform/build-armeabi-v7a/build/outputs/apk/debug/**/echworkers-debug.apk
-            .buildozer/android/platform/build-armeabi-v7a/build/outputs/apk/debug/**/echworkers-*.apk
-            bin/*.apk
-            **/*.apk
+    - name: Build Go binary for Android
+      run: |
+        chmod +x build_go_android.sh
+        go mod init ech-wk || true
+        go get github.com/gorilla/websocket@v1.5.3
+        go mod tidy
+        ./build_go_android.sh
+
+    - name: Accept Android SDK licenses
+      run: |
+        yes | ~/.buildozer/android/platform/android-sdk/tools/bin/sdkmanager --licenses || true
+
+    - name: Build with Buildozer (支持AAB)
+      run: |
+        # ✅ 移除--no-aab参数，使用默认行为
+        buildozer -v android debug
+
+    - name: Upload AAB/APK artifacts (final force upload)
+      if: always()  # 强制执行，即使失败
+      uses: actions/upload-artifact@v4
+      with:
+        name: ech-wk-android-artifacts
+        path: |
+          .buildozer/android/platform/build-armeabi-v7a/dists/**/*.aab
+          .buildozer/android/platform/build-armeabi-v7a/dists/**/*.apk
+          .buildozer/android/platform/build-armeabi-v7a/build/outputs/bundle/debug/**/*.aab
+          .buildozer/android/platform/build-armeabi-v7a/build/outputs/apk/debug/**/*.apk
+          bin/*.aab
+          bin/*.apk
+          **/*.aab
+          **/*.apk
