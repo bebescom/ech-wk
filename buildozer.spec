@@ -76,13 +76,13 @@ android.permissions = INTERNET,ACCESS_NETWORK_STATE,WRITE_EXTERNAL_STORAGE,READ_
 android.archs = armeabi-v7a
 
 # (int) 下载超时时间（秒）
-android.download_timeout = 300
+android.download_timeout = 600
 
 # (bool) 允许下载重试
 android.download_retry = True
 
 # (int) 最大重试次数
-android.download_max_retries = 3
+android.download_max_retries = 10
 
 # (str) 自定义AndroidManifest.xml模板
 android.manifest.intent_filters = []
