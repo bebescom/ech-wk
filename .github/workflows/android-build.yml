@@ -64,7 +64,7 @@ jobs:
         run: |
           buildozer -v android debug --no-aab
           
-      - name: Upload APK artifact (force upload)
+      - name: Upload APK artifact (final force upload)
         if: always()  # 强制执行，即使失败
         uses: actions/upload-artifact@v4
         with:
@@ -72,7 +72,8 @@ jobs:
           path: |
             .buildozer/android/platform/build-armeabi-v7a/dists/**/echworkers-debug.apk
             .buildozer/android/platform/build-armeabi-v7a/dists/**/echworkers-*.apk
-            .buildozer/android/platform/build-armeabi-v7a/dists/**/bin/*.apk
-            .buildozer/android/platform/build-armeabi-v7a/build/outputs/apk/debug/*.apk
+            .buildozer/android/platform/build-armeabi-v7a/dists/**/bin/**/echworkers-*.apk
+            .buildozer/android/platform/build-armeabi-v7a/build/outputs/apk/debug/**/echworkers-debug.apk
+            .buildozer/android/platform/build-armeabi-v7a/build/outputs/apk/debug/**/echworkers-*.apk
             bin/*.apk
             **/*.apk
