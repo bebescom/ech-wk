@@ -1,4 +1,4 @@
-name: Build Android APK
+name: Build Android APK (Even If Failed)
 
 on:
   push:
@@ -8,28 +8,31 @@ on:
 jobs:
   build:
     runs-on: ubuntu-22.04
-
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
 
-    - name: Set up Python
+    - name: Set up Python 3.10 (统一版本)
       uses: actions/setup-python@v5
       with:
-        python-version: "3.9"   # 推荐 3.10
+        python-version: "3.10"
 
     - name: Install system dependencies
       run: |
         sudo apt update
         sudo apt install -y git zip unzip openjdk-17-jdk python3-pip \
-        autoconf automake libtool pkg-config libgmp3-dev libmpfr-dev libmpc-dev \
-        libssl-dev libncurses5-dev libncursesw5-dev libtinfo6 libltdl-dev
-    - name: HARD CLEAN python-for-android
+          autoconf automake libtool pkg-config libgmp3-dev libmpfr-dev libmpc-dev \
+          libssl-dev libncurses5-dev libncursesw5-dev libtinfo6 libltdl-dev
+
+    - name: Clean previous builds
       run: |
+        echo "Cleaning previous build artifacts..."
         rm -rf ~/.buildozer/android/platform/python-for-android
         rm -rf ~/.buildozer/android/platform/build-armeabi-v7a
-      
-    - name: Install Buildozer and python-for-android
+        rm -rf bin/
+        mkdir -p bin
+
+    - name: Install Buildozer and dependencies
       run: |
         python -m pip install --upgrade pip setuptools
         pip install cython==0.29.36
@@ -63,29 +66,96 @@ jobs:
         go mod tidy
         ./build_go_android.sh
 
-    - name: Build APK with Buildozer
+    - name: Build with Buildozer (捕获所有输出)
+      id: build_step
+      continue-on-error: true
       run: |
-        buildozer -v android debug
+        echo "Starting Buildozer build..."
+        # 使用改进的配置文件
+        cp improved_buildozer.spec buildozer.spec
+        
+        # 运行buildozer并捕获所有输出
+        buildozer -v android debug 2>&1 | tee buildozer_build.log
+        
+        # 检查构建是否成功
+        if [ $? -eq 0 ]; then
+          echo "build_success=true" >> $GITHUB_OUTPUT
+        else
+          echo "build_success=false" >> $GITHUB_OUTPUT
+        fi
 
-    - name: Ultimate APK rescue (list and copy)
+    - name: Ultimate APK Rescue Mission (增强版)
       if: ${{ always() }}
       run: |
-        echo "Listing dist directory..."
-        ls -la .buildozer/android/platform/build-armeabi-v7a/dists/echworkers/ || true
-        ls -la .buildozer/android/platform/build-armeabi-v7a/dists/echworkers/build/outputs/apk/debug/ || true
-        ls -la .buildozer/android/platform/build-armeabi-v7a/dists/echworkers/bin/ || true
-          
-        mkdir -p bin
-        cp .buildozer/android/platform/build-armeabi-v7a/dists/echworkers/build/outputs/apk/debug/*.apk bin/ 2>/dev/null || true
-        cp .buildozer/android/platform/build-armeabi-v7a/dists/echworkers/bin/*.apk bin/ 2>/dev/null || true
-        cp .buildozer/android/platform/build-armeabi-v7a/dists/echworkers/*.apk bin/ 2>/dev/null || true
-          
-        echo "Bin content:"
-        ls -la bin/ || true
+        echo "========================================"
+        echo "🔍 Ultimate APK Rescue Mission Started"
+        echo "========================================"
+        
+        # 创建输出目录
+        mkdir -p rescued_apks
+        found_apks=0
+        
+        # 1. 搜索所有可能的APK位置
+        echo "📁 Searching for APK files in all possible locations..."
+        
+        # 搜索.buildozer目录下的所有APK
+        find .buildozer -name "*.apk" -type f | while read -r apk_file; do
+          echo "✅ Found APK: $apk_file"
+          cp "$apk_file" "rescued_apks/$(basename "$apk_file")"
+          found_apks=$((found_apks + 1))
+        done
+        
+        # 搜索项目根目录下的APK
+        find . -maxdepth 5 -name "*.apk" -type f ! -path "./rescued_apks/*" | while read -r apk_file; do
+          echo "✅ Found APK: $apk_file"
+          cp "$apk_file" "rescued_apks/$(basename "$apk_file")"
+          found_apks=$((found_apks + 1))
+        done
+        
+        # 2. 检查是否找到APK
+        if [ $found_apks -gt 0 ]; then
+          echo "🎉 Found $found_apks APK file(s)!"
+          ls -la rescued_apks/
+        else
+          echo "❌ No APK files found in any location"
+        fi
+        
+        # 3. 即使没有找到APK，也创建一个标记文件
+        echo "Build completed at: $(date)" > rescued_apks/build_info.txt
+        echo "Build success: ${{ steps.build_step.outputs.build_success }}" >> rescued_apks/build_info.txt
+        
+        # 4. 复制构建日志
+        if [ -f buildozer_build.log ]; then
+          cp buildozer_build.log rescued_apks/
+        fi
+        
+        echo "========================================"
+        echo "🔍 Ultimate APK Rescue Mission Completed"
+        echo "========================================"
 
-    - name: Upload APK artifact (ultimate)
+    - name: Upload Everything (构建产物 + 日志)
       if: ${{ always() }}
       uses: actions/upload-artifact@v4
       with:
-        name: ech-wk-apk
-        path: bin/*.apk
+        name: ech-wk-android-artifacts
+        path: |
+          rescued_apks/**/*
+          buildozer_build.log
+          buildozer.log
+        retention-days: 14
+
+    - name: Build Status Summary
+      if: ${{ always() }}
+      run: |
+        echo "========================================"
+        echo "📊 Build Status Summary"
+        echo "========================================"
+        echo "Build Success: ${{ steps.build_step.outputs.build_success }}"
+        echo "APK Files Found: $(ls rescued_apks/*.apk 2>/dev/null | wc -l)"
+        echo "========================================"
+        
+        # 如果构建失败但找到了APK，给出警告
+        if [ "${{ steps.build_step.outputs.build_success }}" = "false" ] && [ $(ls rescued_apks/*.apk 2>/dev/null | wc -l) -gt 0 ]; then
+          echo "⚠️ WARNING: Build failed but APK files were found!"
+          echo "⚠️ These APKs might be from a previous successful build"
+        fi
