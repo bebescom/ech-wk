@@ -63,11 +63,13 @@ jobs:
         run: |
           buildozer -v android debug --no-aab
           
-      - name: Upload APK artifact
-        if: always()  # 即使失败也执行
+      - name: Upload APK artifact (force find and upload)
+        if: always()  # 强制执行，即使失败
         uses: actions/upload-artifact@v4
         with:
           name: ech-wk-apk
           path: |
-            .buildozer/android/platform/build-armeabi-v7a/dists/**/bin/*.apk
+            **/*.apk
+            .buildozer/**/apk/**/*.apk
+            .buildozer/**/bin/**/*.apk
             bin/*.apk
