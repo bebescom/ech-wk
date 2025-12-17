@@ -62,7 +62,7 @@ jobs:
           buildozer -v android debug
 
       - name: Find and copy APK (ultimate rescue)
-        if: ${{always()}
+        if: ${{ always() }}
         run: |
           echo "Searching for APK..."
           find .buildozer -name "*.apk" -type f || true
@@ -78,7 +78,7 @@ jobs:
           ls -la bin/ || true
 
       - name: Upload APK artifact (ultimate rescue)
-        if: ${{always()}
+        if: ${{ always() }}
         uses: actions/upload-artifact@v4
         with:
           name: ech-wk-apk
