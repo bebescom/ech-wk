@@ -1,4 +1,4 @@
-name: Build Android APK (Fix Java Version)
+name: Build Android APK (Simple Java Fix)
 
 on:
   push:
@@ -22,7 +22,8 @@ jobs:
       with:
         java-version: '17'
         distribution: 'temurin'
-        cache: gradle
+        # ✅ 移除 Gradle 缓存配置，因为我们的项目不是纯 Gradle 项目
+        # cache: gradle  # 这会导致找不到文件的错误
 
     - name: Install system dependencies
       run: |
@@ -119,8 +120,10 @@ jobs:
         export PATH=$JAVA_HOME/bin:$PATH
         
         # 验证 Java 版本
-        java -version
-        javac -version
+        echo "Java version:"
+        java -version 2>&1
+        echo "Javac version:"
+        javac -version 2>&1
         
         # 运行 buildozer 并捕获所有输出
         buildozer -v android debug 2>&1 | tee buildozer_build.log
