@@ -104,7 +104,7 @@ p4a.libffi_no_system = True
 p4a.cython = 0.29.36
 
 # ✅ 使用develop分支以支持AAB
-p4a.branch = develop
+p4a.branch = v2024.01.21
 
 # 下载重试增强
 android.download_timeout = 600
