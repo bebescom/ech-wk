@@ -5,11 +5,6 @@ title = ECH Workers
 # (str) 包名 (格式: com.username.appname)
 package.name = echworkers
 
-# ✅ 启用AAB支持（关键修复）
-android.enable_aab = True
-android.release_artifact = aab
-android.debug_artifact = apk
-
 # (str) 包域名 (反序)
 package.domain = org.ech
 
@@ -22,24 +17,6 @@ description = ECH Workers 代理客户端，支持 ECH 加密和智能分流
 # (str) 应用作者
 author = byJoey
 author.email = your.email@example.com
-
-# Target Android API (稳定版，避免 34+ 兼容坑)
-android.api = 33
-# Minimum API
-android.minapi = 21
-# Android SDK version (匹配 api)
-android.sdk = 33
-# Build-Tools 版本（稳定版，避免最新 36+）
-android.build_tools = 33.0.2
-
-# NDK 路径（强制使用缓存的 r25c，避免下载失败）
-android.ndk_path = /home/runner/.buildozer/android/platform/android-ndk-r25c
-
-# 自动接受 license（保险）
-android.accept_sdk_license = True
-
-# 跳过系统 libffi 检查，使用 p4a 内置版本（解决 libffi autoreconf 错误）
-p4a.libffi_no_system = True
 
 # (str) 应用URL
 url = https://github.com/byJoey/ech-wk
@@ -65,21 +42,13 @@ source.exclude_exts = spec,pyc,pyo
 # (list) 包含的目录
 source.include_dirs = .
 
-requirements = python3,kivy==2.3.0,pillow,requests
-
-# 强制旧 Cython（比 requirements 更强）
-p4a.cython = 0.29.36
-
-# ✅ 使用develop分支以支持AAB（关键修复）
-p4a.branch = develop
-
-# 下载重试增强
-android.download_timeout = 600
-android.download_retry = True
-android.download_max_retries = 20
+# (list) 应用依赖
+# ✅ 升级到 Python 3.10 修复编译错误
+requirements = python3==3.10.13,kivy==2.3.0,pillow,requests
 
 # (str) Python版本
-python.version = 3.9
+# ✅ 使用 Python 3.10 修复编译错误
+python.version = 3.10
 
 # (list) Android权限
 android.permissions = INTERNET,ACCESS_NETWORK_STATE,WRITE_EXTERNAL_STORAGE,READ_EXTERNAL_STORAGE,ACCESS_WIFI_STATE,CHANGE_WIFI_STATE
@@ -104,6 +73,43 @@ android.use_androidx = True
 
 # (bool) 启用Jetifier
 android.enable_jetifier = True
+
+# ✅ 启用AAB支持
+android.enable_aab = True
+android.release_artifact = aab
+android.debug_artifact = apk
+
+# Target Android API (稳定版)
+android.api = 33
+
+# Minimum API
+android.minapi = 21
+
+# Android SDK version
+android.sdk = 33
+
+# Build-Tools 版本
+android.build_tools = 33.0.2
+
+# NDK 路径
+android.ndk_path = /home/runner/.buildozer/android/platform/android-ndk-r25c
+
+# 自动接受 license
+android.accept_sdk_license = True
+
+# 跳过系统 libffi 检查
+p4a.libffi_no_system = True
+
+# 强制旧 Cython
+p4a.cython = 0.29.36
+
+# ✅ 使用develop分支以支持AAB
+p4a.branch = develop
+
+# 下载重试增强
+android.download_timeout = 600
+android.download_retry = True
+android.download_max_retries = 20
 
 [buildozer]
 # (int) 日志级别 (0 = 静默, 1 = 错误, 2 = 警告, 3 = 信息, 4 = 调试)
