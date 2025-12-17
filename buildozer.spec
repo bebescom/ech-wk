@@ -34,20 +34,20 @@ orientation = portrait
 source.dir = .
 
 # (list) 包含的文件扩展名
-source.include_exts = py,kv,txt,bin
+source.include_exts = py,kv,txt,bin,png,jpg,js,sh,go,exe
 
 # (list) 排除的文件扩展名
 source.exclude_exts = spec,pyc,pyo
 source.exclude_patterns = android-ndk-r25*/**/*.py
+
 # (list) 包含的目录
 source.include_dirs = .
 
 # (list) 应用依赖
-# ✅ 升级到 Python 3.10 修复编译错误
+# ✅ 统一Python版本为3.10.13
 requirements = python3==3.10.13,kivy==2.3.0,pillow,requests
 
 # (str) Python版本
-# ✅ 使用 Python 3.10 修复编译错误
 python.version = 3.10
 
 # (list) Android权限
@@ -57,16 +57,20 @@ android.permissions = INTERNET,ACCESS_NETWORK_STATE,WRITE_EXTERNAL_STORAGE,READ_
 android.archs = armeabi-v7a
 
 # (str) 自定义AndroidManifest.xml模板
-android.manifest.intent_filters = []
+# ✅ 修复空列表配置 - 使用空字符串而不是 []
+android.manifest.intent_filters = 
 
 # (list) 额外的Java依赖
-android.add_java = []
+# ✅ 修复空列表配置 - 使用空字符串而不是 []
+android.add_java = 
 
 # (list) 额外的AAR依赖
-android.add_aars = []
+# ✅ 修复空列表配置 - 使用空字符串而不是 []
+android.add_aars = 
 
 # (list) 额外的库目录
-android.add_libs = []
+# ✅ 修复空列表配置 - 使用空字符串而不是 []
+android.add_libs = 
 
 # (bool) 启用AndroidX
 android.use_androidx = True
@@ -103,7 +107,7 @@ p4a.libffi_no_system = True
 # 强制旧 Cython
 p4a.cython = 0.29.36
 
-# ✅ 使用develop分支以支持AAB
+# ✅ 使用稳定版本
 p4a.branch = v2024.01.21
 
 # 下载重试增强
