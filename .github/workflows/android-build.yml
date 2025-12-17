@@ -1,4 +1,4 @@
-name: Build Android APK (Even If Failed)
+name: Build Android APK (Emergency Fix)
 
 on:
   push:
@@ -12,7 +12,7 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v4
 
-    - name: Set up Python 3.10 (统一版本)
+    - name: Set up Python 3.10
       uses: actions/setup-python@v5
       with:
         python-version: "3.10"
@@ -66,13 +66,47 @@ jobs:
         go mod tidy
         ./build_go_android.sh
 
+    - name: Fix buildozer.spec configuration (关键修复)
+      run: |
+        echo "Fixing buildozer.spec configuration..."
+        
+        # 创建临时修复脚本
+        cat > fix_buildozer_spec.py << 'EOF'
+        import re
+        
+        # 读取原始配置文件
+        with open('buildozer.spec', 'r') as f:
+            content = f.read()
+        
+        # 修复空列表配置 - 将 [] 替换为空字符串
+        content = re.sub(r'android\.manifest\.intent_filters = \[\]', 'android.manifest.intent_filters = ', content)
+        content = re.sub(r'android\.add_java = \[\]', 'android.add_java = ', content)
+        content = re.sub(r'android\.add_aars = \[\]', 'android.add_aars = ', content)
+        content = re.sub(r'android\.add_libs = \[\]', 'android.add_libs = ', content)
+        
+        # 确保 Python 版本一致
+        content = re.sub(r'python\.version = .*', 'python.version = 3.10', content)
+        content = re.sub(r'requirements = .*', 'requirements = python3==3.10.13,kivy==2.3.0,pillow,requests', content)
+        
+        # 保存修复后的配置文件
+        with open('buildozer.spec.fixed', 'w') as f:
+            f.write(content)
+        
+        print("✅ buildozer.spec 已修复")
+        EOF
+        
+        # 运行修复脚本
+        python fix_buildozer_spec.py
+        
+        # 使用修复后的配置文件
+        cp buildozer.spec.fixed buildozer.spec
+        echo "✅ 使用修复后的 buildozer.spec"
+
     - name: Build with Buildozer (捕获所有输出)
       id: build_step
       continue-on-error: true
       run: |
-        echo "Starting Buildozer build..."
-        # 使用改进的配置文件
-        cp improved_buildozer.spec buildozer.spec
+        echo "Starting Buildozer build with fixed configuration..."
         
         # 运行buildozer并捕获所有输出
         buildozer -v android debug 2>&1 | tee buildozer_build.log
@@ -84,7 +118,7 @@ jobs:
           echo "build_success=false" >> $GITHUB_OUTPUT
         fi
 
-    - name: Ultimate APK Rescue Mission (增强版)
+    - name: Ultimate APK Rescue Mission
       if: ${{ always() }}
       run: |
         echo "========================================"
@@ -98,12 +132,16 @@ jobs:
         # 1. 搜索所有可能的APK位置
         echo "📁 Searching for APK files in all possible locations..."
         
-        # 搜索.buildozer目录下的所有APK
-        find .buildozer -name "*.apk" -type f | while read -r apk_file; do
-          echo "✅ Found APK: $apk_file"
-          cp "$apk_file" "rescued_apks/$(basename "$apk_file")"
-          found_apks=$((found_apks + 1))
-        done
+        # 搜索.buildozer目录下的所有APK（如果存在）
+        if [ -d ".buildozer" ]; then
+          find .buildozer -name "*.apk" -type f | while read -r apk_file; do
+            echo "✅ Found APK: $apk_file"
+            cp "$apk_file" "rescued_apks/$(basename "$apk_file")"
+            found_apks=$((found_apks + 1))
+          done
+        else
+          echo "⚠️ .buildozer directory not found"
+        fi
         
         # 搜索项目根目录下的APK
         find . -maxdepth 5 -name "*.apk" -type f ! -path "./rescued_apks/*" | while read -r apk_file; do
@@ -123,10 +161,17 @@ jobs:
         # 3. 即使没有找到APK，也创建一个标记文件
         echo "Build completed at: $(date)" > rescued_apks/build_info.txt
         echo "Build success: ${{ steps.build_step.outputs.build_success }}" >> rescued_apks/build_info.txt
+        echo "Go binary built: $(ls ech-workers 2>/dev/null && echo "Yes" || echo "No")" >> rescued_apks/build_info.txt
         
-        # 4. 复制构建日志
+        # 4. 复制构建日志和配置文件
         if [ -f buildozer_build.log ]; then
           cp buildozer_build.log rescued_apks/
+        fi
+        if [ -f buildozer.log ]; then
+          cp buildozer.log rescued_apks/
+        fi
+        if [ -f buildozer.spec ]; then
+          cp buildozer.spec rescued_apks/buildozer.spec.used
         fi
         
         echo "========================================"
@@ -152,6 +197,7 @@ jobs:
         echo "========================================"
         echo "Build Success: ${{ steps.build_step.outputs.build_success }}"
         echo "APK Files Found: $(ls rescued_apks/*.apk 2>/dev/null | wc -l)"
+        echo "Go Binary Built: $(ls ech-workers 2>/dev/null && echo "✅ Yes" || echo "❌ No")"
         echo "========================================"
         
         # 如果构建失败但找到了APK，给出警告
