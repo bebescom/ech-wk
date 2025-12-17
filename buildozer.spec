@@ -4,9 +4,12 @@ title = ECH Workers
 
 # (str) 包名 (格式: com.username.appname)
 package.name = echworkers
-android.enable_aab = False
-android.release_artifact = apk
+
+# ✅ 启用AAB支持（关键修复）
+android.enable_aab = True
+android.release_artifact = aab
 android.debug_artifact = apk
+
 # (str) 包域名 (反序)
 package.domain = org.ech
 
@@ -22,13 +25,10 @@ author.email = your.email@example.com
 
 # Target Android API (稳定版，避免 34+ 兼容坑)
 android.api = 33
-
 # Minimum API
 android.minapi = 21
-
 # Android SDK version (匹配 api)
 android.sdk = 33
-
 # Build-Tools 版本（稳定版，避免最新 36+）
 android.build_tools = 33.0.2
 
@@ -70,8 +70,8 @@ requirements = python3,kivy==2.3.0,pillow,requests
 # 强制旧 Cython（比 requirements 更强）
 p4a.cython = 0.29.36
 
-# 使用稳定 branch
-p4a.branch = stable
+# ✅ 使用develop分支以支持AAB（关键修复）
+p4a.branch = develop
 
 # 下载重试增强
 android.download_timeout = 600
@@ -86,7 +86,6 @@ android.permissions = INTERNET,ACCESS_NETWORK_STATE,WRITE_EXTERNAL_STORAGE,READ_
 
 # (list) Android架构
 android.archs = armeabi-v7a
-
 
 # (str) 自定义AndroidManifest.xml模板
 android.manifest.intent_filters = []
