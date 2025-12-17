@@ -1,4 +1,4 @@
-name: Build Android APK (Fix Shell Syntax)
+name: Build Android APK (Force Python Version)
 
 on:
   push:
@@ -12,10 +12,12 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v4
 
-    - name: Set up Python 3.10
+    - name: Set up Python 3.10 (强制版本)
       uses: actions/setup-python@v5
       with:
         python-version: "3.10"
+        architecture: "x64"
+        cache: "pip"
 
     - name: Install Java 17 (Required for Gradle)
       uses: actions/setup-java@v4
@@ -23,7 +25,7 @@ jobs:
         java-version: '17'
         distribution: 'temurin'
 
-    - name: Install system dependencies (修复 Shell 语法)
+    - name: Install system dependencies
       run: |
         sudo apt update
         sudo apt install -y git zip unzip python3-pip \
@@ -51,7 +53,7 @@ jobs:
         # 创建必要目录
         mkdir -p bin
 
-    - name: Install Buildozer and dependencies
+    - name: Install Buildozer and dependencies (指定版本)
       run: |
         python -m pip install --upgrade pip setuptools wheel
         pip install cython==0.29.36
@@ -74,7 +76,7 @@ jobs:
         go mod tidy
         ./build_go_android.sh
 
-    - name: Fix buildozer.spec configuration (增强版)
+    - name: Fix buildozer.spec configuration (强制 Python 3.10)
       run: |
         echo "Fixing buildozer.spec configuration..."
         
@@ -92,23 +94,33 @@ jobs:
         content = re.sub(r'android\.add_aars = \[\]', 'android.add_aars = ', content)
         content = re.sub(r'android\.add_libs = \[\]', 'android.add_libs = ', content)
         
-        # 确保 Python 版本一致
+        # 强制设置 Python 3.10 (覆盖任何现有配置)
         content = re.sub(r'python\.version = .*', 'python.version = 3.10', content)
         content = re.sub(r'requirements = .*', 'requirements = python3==3.10.13,kivy==2.3.0,pillow,requests', content)
         
         # 确保包含所有必要的文件
         content = re.sub(r'source\.include_exts = .*', 'source.include_exts = py,kv,txt,bin,png,jpg,js,sh,go,exe,c,h,so', content)
         
-        # 添加 Python 共享库配置
+        # 强制添加 Python 共享库配置 (即使已存在也覆盖)
+        # 首先移除任何现有的 python_recipe 配置
+        content = re.sub(r'^p4a\.python_recipe = .*$', '', content, flags=re.MULTILINE)
+        # 然后添加新的配置
         if 'p4a.python_recipe = python3crystax' not in content:
-            content += '\n# Python 共享库配置\np4a.python_recipe = python3crystax\n'
+            content += '\n# 强制 Python 共享库配置\np4a.python_recipe = python3crystax\n'
         
         # 保存修复后的配置文件
         with open('buildozer.spec.fixed', 'w') as f:
             f.write(content)
         
         print("✅ buildozer.spec 已修复")
-        print("✅ 添加了 Python 共享库配置")
+        print("✅ 强制设置 Python 3.10")
+        print("✅ 强制添加 Python 共享库配置")
+        
+        # 显示修复后的配置摘要
+        print("\n📋 修复后的配置摘要:")
+        for line in content.split('\n'):
+            if line.startswith('python.version') or line.startswith('requirements') or line.startswith('p4a.python_recipe'):
+                print(f"  {line}")
         EOF
         
         # 运行修复脚本
@@ -118,21 +130,32 @@ jobs:
         cp buildozer.spec.fixed buildozer.spec
         echo "✅ 使用修复后的 buildozer.spec"
 
-    - name: Build with Buildozer (使用 Python 共享库修复)
+    - name: Build with Buildozer (强制 Python 3.10)
       id: build_step
       continue-on-error: true
       run: |
-        echo "Starting Buildozer build with Python shared library fix..."
+        echo "Starting Buildozer build with FORCED Python 3.10..."
         
         # 确保使用 Java 17
         export JAVA_HOME=${{ steps.setup-java.outputs.path }}
         export PATH=$JAVA_HOME/bin:$PATH
         
-        # 验证 Java 版本
+        # 强制使用 Python 3.10
+        export PATH="/opt/hostedtoolcache/Python/3.10.19/x64/bin:$PATH"
+        
+        # 验证所有版本
+        echo "========================================"
+        echo "🔍 版本验证"
+        echo "========================================"
+        echo "Python version:"
+        python --version
         echo "Java version:"
-        java -version 2>&1
+        java -version 2>&1 | head -n 1
         echo "Javac version:"
         javac -version 2>&1
+        echo "Buildozer version:"
+        buildozer --version
+        echo "========================================"
         
         # 运行 buildozer 并捕获所有输出
         buildozer -v android debug 2>&1 | tee buildozer_build.log
@@ -144,27 +167,42 @@ jobs:
           echo "build_success=false" >> $GITHUB_OUTPUT
         fi
 
-    - name: Python Shared Library Debug
-      if: ${{ failure() }}
+    - name: 增强型 Python 调试 (构建前后都执行)
       run: |
         echo "========================================"
-        echo "🔍 Python Shared Library Debug"
+        echo "🔍 增强型 Python 调试"
         echo "========================================"
+        
+        # 检查系统 Python 版本
+        echo "📌 系统 Python 版本:"
+        which python
+        python --version
+        which python3
+        python3 --version
         
         # 检查 Python 构建目录
         PYTHON_DIR=".buildozer/android/platform/build-armeabi-v7a/build/other_builds/python3"
-        echo "Python build directory: $PYTHON_DIR"
+        echo -e "\n📌 Python build directory: $PYTHON_DIR"
         
         if [ -d "$PYTHON_DIR" ]; then
           echo "✅ Python build directory exists"
           echo "Directory contents:"
           ls -la "$PYTHON_DIR"
           
+          # 检查 Python 版本目录
+          echo -e "\n📌 Python version directories:"
+          find "$PYTHON_DIR" -maxdepth 1 -type d | grep -E "(python3|3\.)"
+          
           # 检查 Python 共享库
+          echo -e "\n📌 Python shared library files:"
           find "$PYTHON_DIR" -name "libpython*.so" -o -name "python_shared.*" | head -20
         else
           echo "❌ Python build directory does not exist"
         fi
+        
+        # 检查 buildozer.spec 配置
+        echo -e "\n📌 buildozer.spec Python configuration:"
+        grep -E "(python\.version|requirements|p4a\.python_recipe)" buildozer.spec
 
     - name: Ultimate APK Rescue Mission
       if: ${{ always() }}
@@ -208,6 +246,7 @@ jobs:
         echo "Build completed at: $(date)" > rescued_apks/build_info.txt
         echo "Build success: ${{ steps.build_step.outputs.build_success }}" >> rescued_apks/build_info.txt
         echo "Java version used: $(java -version 2>&1 | head -n 1)" >> rescued_apks/build_info.txt
+        echo "Python version used: $(python --version 2>&1)" >> rescued_apks/build_info.txt
         echo "Go binary built: $(ls ech-workers 2>/dev/null && echo "Yes" || echo "No")" >> rescued_apks/build_info.txt
         
         # 复制日志文件
@@ -235,5 +274,6 @@ jobs:
         echo "Build Success: ${{ steps.build_step.outputs.build_success }}"
         echo "APK Files Found: $(ls rescued_apks/*.apk 2>/dev/null | wc -l)"
         echo "Java Version: $(java -version 2>&1 | head -n 1)"
+        echo "Python Version: $(python --version 2>&1)"
         echo "Go Binary Built: $(ls ech-workers 2>/dev/null && echo "✅ Yes" || echo "❌ No")"
         echo "========================================"
