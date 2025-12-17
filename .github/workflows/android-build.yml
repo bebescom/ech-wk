@@ -22,7 +22,7 @@ jobs:
           sudo apt install -y git zip unzip openjdk-17-jdk python3-pip autoconf automake libtool pkg-config libgmp3-dev libmpfr-dev libmpc-dev libssl-dev libncurses5-dev libncursesw5-dev libtinfo6 libltdl-dev
       - name: Install Buildozer and Cython
         run: |
-          pip install --upgrade buildozer cython
+          pip install --upgrade "buildozer==1.5.0" cython==0.29.36
 
       - name: Cache Buildozer global directory
         uses: actions/cache@v4
@@ -63,7 +63,8 @@ jobs:
         run: |
           buildozer -v android debug --no-aab
 
-      - name: Upload APK artifact
+      - name: Upload APK artifact (even if failed)
+        if: always()  # 关键：总是执行，即使上一步失败
         uses: actions/upload-artifact@v4
         with:
           name: ech-wk-apk
