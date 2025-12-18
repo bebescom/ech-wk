@@ -1,4 +1,4 @@
-name: Build Android APK (Fix NDK Version)
+name: Build Android APK (Complete Clean Fix)
 
 on:
   push:
@@ -35,25 +35,51 @@ jobs:
           libportmidi-dev libswscale-dev libavformat-dev libavcodec-dev zlib1g-dev \
           libpython3-dev python3-dev libffi-dev
 
-    - name: Clean ALL previous builds (彻底清理)
+    - name: Complete System Clean (彻底清理系统)
       run: |
-        echo "Performing deep clean of previous builds..."
-        # 清理 Buildozer 缓存
+        echo "========================================"
+        echo "🧹 Performing COMPLETE SYSTEM CLEAN"
+        echo "========================================"
+        
+        # 清理 Buildozer 缓存和配置
+        echo "🔧 Cleaning Buildozer cache and config..."
         rm -rf ~/.buildozer
         rm -rf .buildozer
-        # 清理 Python 缓存
+        rm -rf ~/.config/buildozer
+        rm -rf ~/.cache/buildozer
+        
+        # 清理 Python 相关文件
+        echo "🔧 Cleaning Python files..."
         rm -rf __pycache__
         rm -rf *.pyc
-        # 清理构建输出
         rm -rf bin/
         rm -rf dist/
         rm -rf build/
+        rm -rf venv/
+        rm -rf .venv/
+        
         # 清理 Go 相关文件
+        echo "🔧 Cleaning Go files..."
         rm -rf go.mod go.sum
+        rm -rf ech-workers
+        
         # 清理 NDK 相关文件
+        echo "🔧 Cleaning NDK files..."
         rm -rf android-ndk-*
+        rm -rf ~/android-ndk-*
+        rm -rf /opt/android-ndk-*
+        
+        # 清理其他构建文件
+        echo "🔧 Cleaning other build files..."
+        rm -rf .gradle
+        rm -rf .android
+        rm -rf ~/.gradle
+        rm -rf ~/.android
+        
         # 创建必要目录
         mkdir -p bin
+        
+        echo "✅ Complete system clean finished!"
 
     - name: Install Buildozer and dependencies (指定版本)
       run: |
@@ -62,10 +88,10 @@ jobs:
         pip install buildozer==1.5.0
         pip install python-for-android==2024.01.21
 
-    - name: Install Android NDK r25c (强制版本)
+    - name: Install Android NDK r25c (手动安装)
       run: |
         echo "========================================"
-        echo "🔧 Installing Android NDK r25c (强制版本)"
+        echo "🔧 Installing Android NDK r25c (手动安装)"
         echo "========================================"
         
         # 确保 NDK 目录不存在
@@ -99,7 +125,7 @@ jobs:
         go mod tidy
         ./build_go_android.sh
 
-    - name: Fix buildozer.spec configuration (统一 NDK 和 Python 配置)
+    - name: Fix buildozer.spec configuration (完整修复)
       run: |
         echo "========================================"
         echo "🔧 Fixing buildozer.spec configuration"
@@ -160,12 +186,12 @@ jobs:
         cp buildozer.spec.fixed buildozer.spec
         echo "✅ 使用修复后的 buildozer.spec"
 
-    - name: Build with Buildozer (统一版本配置)
+    - name: Build with Buildozer (完整配置)
       id: build_step
       continue-on-error: true
       run: |
         echo "========================================"
-        echo "🔨 Starting Buildozer build with UNIFIED versions"
+        echo "🔨 Starting Buildozer build with COMPLETE configuration"
         echo "========================================"
         
         # 确保使用 Java 17
@@ -208,10 +234,10 @@ jobs:
           echo "build_success=false" >> $GITHUB_OUTPUT
         fi
 
-    - name: 增强型调试 (构建前后都执行)
+    - name: 终极调试 (构建前后都执行)
       run: |
         echo "========================================"
-        echo "🔍 增强型调试信息"
+        echo "🔍 终极调试信息"
         echo "========================================"
         
         # 检查系统环境
@@ -242,6 +268,10 @@ jobs:
         echo -e "\n📌 NDK configuration:"
         find ~/.buildozer/android/platform -name "android-ndk-*"
         ls -la ~/.buildozer/android/platform/ | grep ndk
+        
+        # 检查 buildozer.spec 配置
+        echo -e "\n📌 buildozer.spec 最终配置:"
+        grep -E "(python\.version|requirements|p4a\.python_recipe|android\.ndk)" buildozer.spec
 
     - name: Ultimate APK Rescue Mission
       if: ${{ always() }}
