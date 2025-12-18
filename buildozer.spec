@@ -97,7 +97,8 @@ android.build_tools = 33.0.2
 
 # NDK 路径
 android.ndk_path = /home/runner/.buildozer/android/platform/android-ndk-r25c
-
+# 强制设置 NDK 版本
+content = re.sub(r'android\.ndk = .*', 'android.ndk = r25c', content)
 # 自动接受 license
 android.accept_sdk_license = True
 
