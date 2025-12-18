@@ -1,4 +1,4 @@
-name: Build Android APK (Force Python Version)
+name: Build Android APK (Fix NDK Version)
 
 on:
   push:
@@ -50,6 +50,8 @@ jobs:
         rm -rf build/
         # 清理 Go 相关文件
         rm -rf go.mod go.sum
+        # 清理 NDK 相关文件
+        rm -rf android-ndk-*
         # 创建必要目录
         mkdir -p bin
 
@@ -60,13 +62,34 @@ jobs:
         pip install buildozer==1.5.0
         pip install python-for-android==2024.01.21
 
-    - name: Install Android NDK r25c
+    - name: Install Android NDK r25c (强制版本)
       run: |
-        echo "Installing Android NDK r25c..."
+        echo "========================================"
+        echo "🔧 Installing Android NDK r25c (强制版本)"
+        echo "========================================"
+        
+        # 确保 NDK 目录不存在
+        rm -rf ~/.buildozer/android/platform/android-ndk-r25c
+        rm -rf ~/.buildozer/android/platform/android-ndk-*
+        
+        # 创建 NDK 目录
         mkdir -p ~/.buildozer/android/platform
+        
+        # 下载并安装 NDK r25c
         wget https://dl.google.com/android/repository/android-ndk-r25c-linux.zip -O ndk.zip
         unzip -q ndk.zip -d ~/.buildozer/android/platform
         rm ndk.zip
+        
+        # 验证 NDK 安装
+        NDK_PATH=~/.buildozer/android/platform/android-ndk-r25c
+        echo "✅ NDK installed at: $NDK_PATH"
+        echo "✅ NDK version: $(grep -A 1 "Pkg.Revision" $NDK_PATH/source.properties | grep -Eo '[0-9]+\.[0-9]+\.[0-9]+')"
+        
+        # 设置 NDK 环境变量
+        echo "✅ Setting NDK environment variables"
+        echo "export ANDROID_NDK_HOME=$NDK_PATH" >> $GITHUB_ENV
+        echo "export NDK_HOME=$NDK_PATH" >> $GITHUB_ENV
+        echo "export PATH=$NDK_PATH:$PATH" >> $GITHUB_ENV
 
     - name: Build Go binary for Android
       run: |
@@ -76,13 +99,16 @@ jobs:
         go mod tidy
         ./build_go_android.sh
 
-    - name: Fix buildozer.spec configuration (强制 Python 3.10)
+    - name: Fix buildozer.spec configuration (统一 NDK 和 Python 配置)
       run: |
-        echo "Fixing buildozer.spec configuration..."
+        echo "========================================"
+        echo "🔧 Fixing buildozer.spec configuration"
+        echo "========================================"
         
         # 创建临时修复脚本
         cat > fix_buildozer_spec.py << 'EOF'
         import re
+        import os
         
         # 读取原始配置文件
         with open('buildozer.spec', 'r') as f:
@@ -108,6 +134,9 @@ jobs:
         if 'p4a.python_recipe = python3crystax' not in content:
             content += '\n# 强制 Python 共享库配置\np4a.python_recipe = python3crystax\n'
         
+        # 强制设置 NDK 版本
+        content = re.sub(r'android\.ndk = .*', 'android.ndk = r25c', content)
+        
         # 保存修复后的配置文件
         with open('buildozer.spec.fixed', 'w') as f:
             f.write(content)
@@ -115,11 +144,12 @@ jobs:
         print("✅ buildozer.spec 已修复")
         print("✅ 强制设置 Python 3.10")
         print("✅ 强制添加 Python 共享库配置")
+        print("✅ 强制设置 NDK r25c")
         
         # 显示修复后的配置摘要
         print("\n📋 修复后的配置摘要:")
         for line in content.split('\n'):
-            if line.startswith('python.version') or line.startswith('requirements') or line.startswith('p4a.python_recipe'):
+            if line.startswith('python.version') or line.startswith('requirements') or line.startswith('p4a.python_recipe') or line.startswith('android.ndk'):
                 print(f"  {line}")
         EOF
         
@@ -130,11 +160,13 @@ jobs:
         cp buildozer.spec.fixed buildozer.spec
         echo "✅ 使用修复后的 buildozer.spec"
 
-    - name: Build with Buildozer (强制 Python 3.10)
+    - name: Build with Buildozer (统一版本配置)
       id: build_step
       continue-on-error: true
       run: |
-        echo "Starting Buildozer build with FORCED Python 3.10..."
+        echo "========================================"
+        echo "🔨 Starting Buildozer build with UNIFIED versions"
+        echo "========================================"
         
         # 确保使用 Java 17
         export JAVA_HOME=${{ steps.setup-java.outputs.path }}
@@ -142,6 +174,11 @@ jobs:
         
         # 强制使用 Python 3.10
         export PATH="/opt/hostedtoolcache/Python/3.10.19/x64/bin:$PATH"
+        
+        # 确保使用正确的 NDK
+        export ANDROID_NDK_HOME=${{ env.ANDROID_NDK_HOME }}
+        export NDK_HOME=${{ env.NDK_HOME }}
+        export PATH=$ANDROID_NDK_HOME:$PATH
         
         # 验证所有版本
         echo "========================================"
@@ -155,6 +192,10 @@ jobs:
         javac -version 2>&1
         echo "Buildozer version:"
         buildozer --version
+        echo "NDK version:"
+        ndk-build --version 2>&1 | head -n 1
+        echo "NDK path:"
+        echo $ANDROID_NDK_HOME
         echo "========================================"
         
         # 运行 buildozer 并捕获所有输出
@@ -167,18 +208,15 @@ jobs:
           echo "build_success=false" >> $GITHUB_OUTPUT
         fi
 
-    - name: 增强型 Python 调试 (构建前后都执行)
+    - name: 增强型调试 (构建前后都执行)
       run: |
         echo "========================================"
-        echo "🔍 增强型 Python 调试"
+        echo "🔍 增强型调试信息"
         echo "========================================"
         
-        # 检查系统 Python 版本
-        echo "📌 系统 Python 版本:"
-        which python
-        python --version
-        which python3
-        python3 --version
+        # 检查系统环境
+        echo "📌 系统环境变量:"
+        env | grep -E "(PYTHON|JAVA|NDK|ANDROID)" | head -20
         
         # 检查 Python 构建目录
         PYTHON_DIR=".buildozer/android/platform/build-armeabi-v7a/build/other_builds/python3"
@@ -200,9 +238,10 @@ jobs:
           echo "❌ Python build directory does not exist"
         fi
         
-        # 检查 buildozer.spec 配置
-        echo -e "\n📌 buildozer.spec Python configuration:"
-        grep -E "(python\.version|requirements|p4a\.python_recipe)" buildozer.spec
+        # 检查 NDK 配置
+        echo -e "\n📌 NDK configuration:"
+        find ~/.buildozer/android/platform -name "android-ndk-*"
+        ls -la ~/.buildozer/android/platform/ | grep ndk
 
     - name: Ultimate APK Rescue Mission
       if: ${{ always() }}
@@ -247,6 +286,7 @@ jobs:
         echo "Build success: ${{ steps.build_step.outputs.build_success }}" >> rescued_apks/build_info.txt
         echo "Java version used: $(java -version 2>&1 | head -n 1)" >> rescued_apks/build_info.txt
         echo "Python version used: $(python --version 2>&1)" >> rescued_apks/build_info.txt
+        echo "NDK version used: $(ndk-build --version 2>&1 | head -n 1 | grep -Eo '[0-9]+\.[0-9]+\.[0-9]+')" >> rescued_apks/build_info.txt
         echo "Go binary built: $(ls ech-workers 2>/dev/null && echo "Yes" || echo "No")" >> rescued_apks/build_info.txt
         
         # 复制日志文件
@@ -275,5 +315,6 @@ jobs:
         echo "APK Files Found: $(ls rescued_apks/*.apk 2>/dev/null | wc -l)"
         echo "Java Version: $(java -version 2>&1 | head -n 1)"
         echo "Python Version: $(python --version 2>&1)"
+        echo "NDK Version: $(ndk-build --version 2>&1 | head -n 1 | grep -Eo '[0-9]+\.[0-9]+\.[0-9]+')"
         echo "Go Binary Built: $(ls ech-workers 2>/dev/null && echo "✅ Yes" || echo "❌ No")"
         echo "========================================"
